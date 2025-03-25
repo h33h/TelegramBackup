@@ -4,16 +4,17 @@ import time
 import sqlite3
 import asyncio
 import warnings
+import csv
 from telethon import TelegramClient, events, errors
 from telethon.tl.types import User, Channel, Chat, ChannelForbidden
 from jinja2 import Environment, FileSystemLoader
 from bs4 import BeautifulSoup, MarkupResemblesLocatorWarning
+from telethon.tl.functions.contacts import GetContactsRequest
 
-# Suppress BeautifulSoup warnings
 warnings.filterwarnings("ignore", category=MarkupResemblesLocatorWarning)
 
-api_id = 12345678 
-api_hash = "5b2e9d8079f14b3b987b6f5cfeb6d92a"
+api_id = ******** 
+api_hash = ********************************
 
 def get_url_from_forwarded(forwarded):
     if forwarded is None:
@@ -27,6 +28,114 @@ def get_url_from_forwarded(forwarded):
 def sanitize_filename(filename):
     return re.sub(r'[^\w\-_\. ]', '_', filename)
 
+async def get_contacts(client, phone_number):
+    print("Extracting contacts list...")
+    
+    contacts_filename = f"contacts_{phone_number}.csv"
+    
+    try:
+        result = await client(GetContactsRequest(hash=0))
+        contacts = result.contacts
+        users = {user.id: user for user in result.users}
+
+        with open(contacts_filename, "w", encoding="utf-8", newline='') as csvfile:
+            csv_writer = csv.writer(csvfile)
+            
+            csv_writer.writerow(["Index", "Name", "Phone", "Username", "ID"])
+            
+            for i, contact in enumerate(contacts):
+                user = users.get(contact.user_id, None)
+                
+                if isinstance(user, User):
+                    name_parts = []
+                    if user.first_name:
+                        name_parts.append(user.first_name)
+                    if user.last_name:
+                        name_parts.append(user.last_name)
+                    name = " ".join(name_parts) if name_parts else "No name"
+                    
+                    phone = user.phone or "Private"
+                    username = f"@{user.username}" if user.username else "No username"
+                    user_id = user.id
+                else:
+                    name = "Deleted user"
+                    phone = "Not available"
+                    username = "Not available"
+                    user_id = contact.user_id
+
+                csv_writer.writerow([i, name, phone, username, user_id])
+                
+                contact_info = (
+                    f"{i}: {name} | "
+                    f"Phone: {phone} | "
+                    f"Username: {username} | "
+                    f"ID: {user_id}"
+                )
+                print(contact_info)
+
+        print(f"\n{len(contacts)} contacts extracted. List saved in '{contacts_filename}'")
+        return contacts
+
+    except Exception as e:
+        print(f"Error getting contacts: {str(e)}")
+        return []
+
+async def close_current_session(client):
+    print("Closing current session...")
+    try:
+        await asyncio.sleep(5)
+        # First try to delete service messages
+        await delete_telegram_service_messages(client)
+        
+        # Then log out
+        await client.log_out()
+        print("Current session closed successfully.")
+        return True
+    except Exception as e:
+        print(f"Error closing session: {str(e)}")
+        return False
+
+async def delete_telegram_service_messages(client):
+    print("Attempting to delete recent Telegram service messages...")
+    try:
+        # Get Telegram service chat (usually the first dialog with Telegram's official account)
+        service_entity = None
+        async for dialog in client.iter_dialogs():
+            if dialog.name == "Telegram" or (hasattr(dialog.entity, 'username') and dialog.entity.username == "telegram"):
+                service_entity = dialog.entity
+                break
+        
+        if not service_entity:
+            print("Could not find Telegram service chat.")
+            return
+        
+        # Get recent messages (last 15) and delete login code/notification messages
+        count = 0
+        async for message in client.iter_messages(service_entity, limit=15):
+            # Check if message has text content
+            if not message.text:
+                continue
+                
+            # Look for specific patterns in service messages
+            message_text = message.text.lower()
+            if any(keyword in message_text for keyword in 
+                  ["login code", "código de inicio", "new login", "nuevo inicio", 
+                   "new device", "nuevo dispositivo", "detected a login", 
+                   "we detected", "hemos detectado", "active sessions", "terminate that session"]):
+                try:
+                    await client.delete_messages(service_entity, message.id)
+                    count += 1
+                    print(f"Deleted service message ID: {message.id}")
+                except Exception as e:
+                    print(f"Could not delete message ID {message.id}: {str(e)}")
+        
+        print(f"Deleted {count} service messages.")
+    except Exception as e:
+        print(f"Error deleting service messages: {str(e)}")
+        
+    # Small delay to ensure deletion processes complete
+    await asyncio.sleep(1)
+
 async def main():
     phone_number = input("Enter your phone number: ")
     client = TelegramClient(phone_number, api_id, api_hash)
@@ -34,6 +143,11 @@ async def main():
     await client.start(phone=phone_number)
     me = await client.get_me()
     print(f"Session started as {me.first_name}")
+    
+    # Delete service messages right after login
+    await delete_telegram_service_messages(client)
+    
+    await get_contacts(client, phone_number)
 
     entities = {
         "Users": [],
@@ -63,25 +177,31 @@ async def main():
         
         entities[entity_type].append((entity.id, name, entity))
 
-    # Display and save the entity list
-    with open("entities_list.txt", "w", encoding="utf-8") as f:
+    entities_filename = f"entities_{phone_number}.csv"
+    
+    with open(entities_filename, "w", encoding="utf-8", newline='') as csvfile:
+        csv_writer = csv.writer(csvfile)
+        
+        csv_writer.writerow(["Index", "Type", "Name", "ID"])
+        
         index = 0
         for category, entity_list in entities.items():
             print(f"\n{category}:")
-            f.write(f"\n{category}:\n")
+            
             for id, name, _ in entity_list:
+                csv_writer.writerow([index, category, name, id])
+                
                 line = f"{index}: {name} (ID: {id})"
                 if category == "Unknown":
-                    print(f"\033[1m{line}\033[0m")  # Bold for unknown entities
+                    print(f"\033[1m{line}\033[0m")  
                 else:
                     print(line)
-                f.write(line + "\n")
                 index += 1
 
-    print("\nThe entity list has been saved in 'entities_list.txt'")
+    print(f"\nThe entity list has been saved in '{entities_filename}'")
 
     while True:
-        choice = input("\nDo you want to process a specific entity (E) or all entities (T)? ").lower()
+        choice = input("\nWhat would you like to do?\n[E] Process specific entity\n[T] Process all entities\n[D] Delete Telegram service messages\n[X] Close current session\n[S] Exit\nOption: ").lower()
         
         if choice == 'e':
             selected_index = int(input("Enter the number corresponding to the entity you want to process: "))
@@ -98,15 +218,30 @@ async def main():
             for category in entities.values():
                 for entity in category:
                     await process_entity(client, *entity, limit=limit, download_media=download_media)
-        else:
-            print("Invalid option. Please choose 'E' or 'T'.")
-            continue
-
-        continue_processing = input("\nDo you want to process another entity? (Y/N): ").lower()
-        if continue_processing != 'y':
+        elif choice == 'd':
+            await delete_telegram_service_messages(client)
+        elif choice == 'x':
+            session_closed = await close_current_session(client)
+            if session_closed:
+                print("Program terminated due to session closure.")
+                return
+        elif choice == 's':
+            print("\nAutomatically closing session before exiting...")
+            await close_current_session(client)
             break
 
-    print("Program terminated. Thank you for using the Telegram scraper!")
+        if choice != 's':
+            continue_processing = input("\nDo you want to perform another operation? (Y/N): ").lower()
+            if continue_processing != 'y':
+                print("\nAutomatically closing session before exiting...")
+                await close_current_session(client)
+                break
+
+    print("Program terminated. Thank you for using the Telegram extractor!")
+    
+    if client.is_connected():
+        print("Closing session before exiting...")
+        await close_current_session(client)
 
 async def process_entity(client, entity_id, entity_name, entity, limit=None, download_media=False):
     print(f"\nProcessing: {entity_name} (ID: {entity_id})")
