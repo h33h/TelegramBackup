@@ -5,6 +5,8 @@ TelegramBackup is a sophisticated tool designed for extracting, organizing, and 
 ## Key Features
 
 - **Comprehensive Backup**: TelegramBackup archives all forms of communication, including text messages, media files, forwarded messages, and message buttons.
+- **Contact Extraction**: New capability to extract and save complete contact lists in CSV format.
+- **Session Management**: Enhanced security with automatic session closure and service message cleanup.
 - **User-Friendly Interaction**: Allows users to choose between backing up specific entities (users, channels, groups) or all available dialogs at once.
 - **Media Download**: Offers the option to automatically download media files associated with messages, such as photos, videos, and documents.
 - **HTML Output**: Generates clean, readable HTML files for easy navigation and visualization of backed-up messages.
@@ -54,10 +56,17 @@ pip3 install telethon jinja2 beautifulsoup4
     python3 telegram_backup.py
     ```
 2. Enter the Telegram phone number when prompted to start the session.
-3. The script will list all available entities (Users, Channels, Groups) and save the list to `entities_list.txt`.
-4. Choose whether to process a specific entity or all entities.
-5. Decide whether you want to download media files along with the messages.
-6. After completion, the messages are saved in an SQLite database, and an HTML file is generated for easy browsing.
+3. The script will extract your contact list and save it to a CSV file.
+4. The script will list all available entities (Users, Channels, Groups) and save the list to a CSV file.
+5. Choose from the menu options:
+   - Process a specific entity
+   - Process all entities
+   - Delete Telegram service messages
+   - Close current session
+   - Exit
+6. When processing entities, decide whether you want to download media files along with the messages.
+7. After completion, the messages are saved in an SQLite database, and an HTML file is generated for easy browsing.
+8. The script automatically handles session closure for security when you exit.
 
 ### Example Output
 
