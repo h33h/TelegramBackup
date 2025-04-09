@@ -1,5 +1,3 @@
 telethon
 jinja2
 beautifulsoup4
-pyaes
-rsa
