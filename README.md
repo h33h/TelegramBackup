@@ -1,19 +1,23 @@
 # TelegramBackup - Advanced Backup Solution for Telegram Chats
 
-TelegramBackup is a sophisticated tool designed for extracting, organizing, and archiving messages from your Telegram chats, channels, and groups. It offers a unique approach by not only storing message content but also preserving media, links, buttons, and metadata in an organized format. Whether you're looking to back up your personal chats, archive large channels, or extract important data from groups, **TelegramBackup** ensures a seamless and efficient process.
+TelegramBackup is a comprehensive tool designed for extracting, organizing, and archiving messages from your Telegram chats, channels, and groups. It preserves not only message content but also media files, reactions, replies, forwarded content, and other rich features that make Telegram unique. Whether you need to back up personal conversations, archive large channels, or export group discussions, TelegramBackup offers a complete solution.
 
-## Key Features
+## 🌟 Key Features
 
-- **Comprehensive Backup**: TelegramBackup archives all forms of communication, including text messages, media files, forwarded messages, and message buttons.
-- **Contact Extraction**: Capability to extract and save complete contact lists in CSV format.
-- **Session Management**: Enhanced security with automatic session closure and service message cleanup.
-- **User-Friendly Interaction**: Allows users to choose between backing up specific entities (users, channels, groups) or all available dialogs at once.
-- **Complete Media Download**: Automatically downloads all file types associated with messages, including photos, videos, documents, voice messages, and any other attachments.
-- **HTML Output**: Generates clean, readable HTML files for easy navigation and visualization of backed-up messages.
-- **SQL Database Storage**: All messages, media, and related data are stored in a local SQLite database, providing a structured and easily accessible archive.
-- **Multiple Entity Support**: Supports users, channels, supergroups, and regular groups, ensuring that all your important data is captured.
+- **Complete Message Archiving**: Preserve text messages, media files, reactions, replies, service messages, and more
+- **Rich Media Support**: Download and view photos, videos, voice messages, audio files, and documents
+- **Interactive HTML Export**: Browse your archived messages with a clean, responsive interface similar to Telegram's own design
+- **Incremental Updates**: Update existing backups with only new messages without recreating the entire archive
+- **Contact Management**: Extract and save your complete contact list in a searchable format
+- **Message Threading**: View message replies with links to original messages and preview on hover
+- **Reaction Support**: See all emoji reactions to messages just like in Telegram
+- **Date Grouping**: Messages are organized by date for easier navigation
+- **Multiple Entity Types**: Support for private chats, channels, supergroups, and regular groups
+- **Web Preview Support**: Link previews are preserved in the backup
+- **SQLite Storage**: All data is stored in a structured SQLite database for easy access and querying
+- **Session Security**: Automatic session management with cleanup of sensitive service messages
 
-## Installation
+## 📋 Installation
 
 ### Prerequisites
 - Python 3.6 or higher
@@ -42,7 +46,7 @@ TelegramBackup is a sophisticated tool designed for extracting, organizing, and 
     pip install telethon jinja2 beautifulsoup4
     ```
 
-## Getting Telegram API Credentials
+## 🔑 Getting Telegram API Credentials
 
 Before using TelegramBackup, you need to obtain your own Telegram API credentials:
 
@@ -75,7 +79,7 @@ Before using TelegramBackup, you need to obtain your own Telegram API credential
 
 > **IMPORTANT**: The `api_id` must be an integer without quotes, and the `api_hash` must be a string with quotes.
 
-## Usage
+## 🚀 Usage
 
 1. **Run the script**:
     ```bash
@@ -96,6 +100,7 @@ Before using TelegramBackup, you need to obtain your own Telegram API credential
    Choose from the menu options:
    - **[E] Process a specific entity**: Backup a single chat, channel, or group
    - **[T] Process all entities**: Backup everything
+   - **[U] Update existing backup**: Add only new messages to an existing backup
    - **[D] Delete Telegram service messages**: Clean up service messages
    - **[X] Close current session**: End the current session securely
    - **[S] Exit**: Exit the program
@@ -105,21 +110,55 @@ Before using TelegramBackup, you need to obtain your own Telegram API credential
    - Choose whether to download all media files (Y/N)
    - For large chats, consider processing in batches to avoid timeouts
 
-6. **Accessing Your Backup**:
+6. **Updating existing backups**:
+   - When using the [U] option, select the entity you want to update
+   - The script will identify the last message in your existing backup
+   - Only messages newer than this will be retrieved and added to the database
+   - The HTML file will be regenerated with all messages (old and new)
+
+7. **Accessing Your Backup**:
    - Messages are stored in an SQLite database (`.db` file)
    - An HTML file is generated for easy browsing of messages
    - Media files are saved in the `media/[entity_id]/` directory
+   - The HTML interface shows messages grouped by date with sender information, reactions, replies, and media playback
 
-## Handling Large Backups
+## 📱 HTML Export Features
+
+The generated HTML export includes:
+
+- **Message Grouping by Date**: Messages are organized by day for easier navigation
+- **Sender Information**: Each message shows who sent it
+- **Message Threading**: Replies are linked to original messages with preview on hover
+- **Reactions Display**: See emoji reactions to messages
+- **Media Playback**: Directly play audio, voice messages and videos in the browser
+- **Image Display**: View images inline
+- **Web Link Previews**: Link previews similar to Telegram's interface
+- **Service Messages**: System notifications (joins, leaves, etc.) are properly displayed
+- **Forwarded Messages**: Clear indication of forwarded content with source links when available
+- **Mobile-Friendly Design**: Responsive layout works on all devices
+
+## 💾 Database Structure
+
+The SQLite database contains the following main tables:
+
+- **messages**: Stores the core message data including text, media, timestamps, and metadata
+- **buttons**: Records message buttons and inline URLs
+- **replies**: Tracks reply relationships between messages
+- **reactions**: Stores emoji reactions to messages with counts
+
+You can query this database directly using any SQLite browser for advanced analysis or custom exports.
+
+## ⚠️ Handling Large Backups
 
 If you're backing up chats with hundreds of thousands of messages:
 
 1. **Start with a smaller batch**: First try backing up a limited number (e.g., 1000) to test
 2. **Ensure adequate storage**: Media files can consume significant disk space
-3. **Run in a stable environment**: Avoid using USB drives or removable storage for the backup process
-4. **Be patient**: Large backups can take considerable time depending on your internet connection
+3. **Use incremental updates**: After the initial backup, use the update feature for periodic updates
+4. **Run in a stable environment**: Avoid using USB drives or removable storage for the backup process
+5. **Be patient**: Large backups can take considerable time depending on your internet connection
 
-## Troubleshooting
+## 🔧 Troubleshooting
 
 ### Common Issues and Solutions
 
@@ -145,26 +184,33 @@ If you're backing up chats with hundreds of thousands of messages:
    - If you get errors related to the `.session` file, delete it and start a new session
    - These files are stored in the same directory as the script
 
+6. **Unicode/Encoding Issues**:
+   - If you see encoding problems in CSV files, make sure your terminal supports UTF-8
+   - Try opening the CSV files in a modern spreadsheet application instead of a text editor
+
 ### Advanced Tips
 
 - **Customizing HTML Output**: You can modify the `template.html` file to change how the exported HTML looks
 - **Working with the Database**: The SQLite database can be opened with tools like DB Browser for SQLite if you want to perform custom queries
 - **Automating Backups**: Consider setting up a scheduled task to run the script periodically
+- **Media File Management**: Large media files are stored separately from the database in the `media/` directory, which you can back up independently
 
-## Technical Details
+## 📝 Technical Details
 
-- **Message Processing**: TelegramBackup iterates through all messages of a selected entity, extracts their content, and stores them in an SQLite database. It also handles media download, message forwarding, and buttons associated with messages.
-- **Flood Wait Handling**: The script implements flood control management by waiting for a specified time in case the Telegram API returns a flood error.
-- **HTML Rendering**: Using Jinja2, TelegramBackup dynamically generates HTML files that can be easily viewed in any browser, preserving the structure of the original messages, including any media and buttons.
+- **Message Processing**: TelegramBackup iterates through messages of a selected entity, extracts their content and metadata, and stores everything in an SQLite database.
+- **Media Handling**: Media files are downloaded to a structured directory and referenced in the database by path and hash.
+- **HTML Rendering**: Using Jinja2 templating, the script generates a responsive HTML interface for browsing the archived messages.
+- **Flood Control**: The script implements flood control management by respecting Telegram API rate limits.
+- **Character Encoding**: Special attention is paid to proper UTF-8 encoding to handle all languages and emoji correctly.
 
-## Ethical Use and Legal Considerations
+## ⚖️ Ethical Use and Legal Considerations
 
 **TelegramBackup** is intended for personal use, enabling users to backup their own Telegram data. The misuse of this tool, such as unauthorized data extraction from accounts or channels where you do not have permission, is strictly prohibited. Ensure that all data you process with this tool complies with Telegram's terms of service and local data protection laws.
 
-## License
+## 📄 License
 
 This script is provided under the GNU Affero General Public License v3.0. You can find the full license text in the [LICENSE](LICENSE) file.
 
 ---
 
-With TelegramBackup, you have a comprehensive, customizable, and reliable solution for preserving your Telegram communications. Whether for personal archiving or professional data analysis, this tool offers unmatched flexibility and functionality.
+*TelegramBackup provides a comprehensive, customizable, and reliable solution for preserving your Telegram communications. Whether for personal archiving or professional data analysis, this tool offers unmatched flexibility and functionality.*
