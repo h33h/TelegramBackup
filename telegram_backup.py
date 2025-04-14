@@ -41,6 +41,27 @@ def get_file_hash(file_path):
             hash_md5.update(chunk)
     return hash_md5.hexdigest()
 
+def extract_user_id(from_id_str):
+    if not from_id_str:
+        return None
+    
+    match = re.search(r"user_id=(\d+)", from_id_str)
+    if match:
+        return match.group(1)
+    
+    match = re.search(r"channel_id=(\d+)", from_id_str)
+    if match:
+        return match.group(1)
+    
+    match = re.search(r"chat_id=(\d+)", from_id_str)
+    if match:
+        return match.group(1)
+    
+    if from_id_str.isdigit():
+        return from_id_str
+    
+    return None
+
 async def get_contacts(client, phone_number):
     print("Extracting contacts list...")
     
@@ -149,7 +170,7 @@ async def delete_telegram_service_messages(client):
 
 async def main():
     phone_number = input("Enter your phone number: ")
-    client = TelegramClient(phone_number, api_id, api_hash)
+    client = TelegramClient(phone_number, api_id, api_hash, receive_updates=False)
     
     await client.start(phone=phone_number)
     me = await client.get_me()
@@ -317,7 +338,7 @@ def get_emoji_string(reaction):
         else:
             return str(reaction)
     except Exception as e:
-        print(f"Error procesando reacción: {e}")
+        print(f"Error processing reaction: {e}")
         return "Unknown"
 
 async def get_channel_name_from_message(client, message):
@@ -360,6 +381,9 @@ async def process_entity(client, entity_id, entity_name, entity, limit=None, dow
         web_preview TEXT,
         extraction_time TEXT,
         is_service_message BOOLEAN,
+        is_voice_message BOOLEAN,
+        is_pinned BOOLEAN,
+        user_id TEXT,
         PRIMARY KEY (id, entity_id)
     )""")
     
@@ -380,6 +404,7 @@ async def process_entity(client, entity_id, entity_name, entity, limit=None, dow
         message_id INTEGER,
         entity_id INTEGER,
         reply_to_msg_id INTEGER,
+        quote_text TEXT,
         UNIQUE(message_id, entity_id)
     )""")
     
@@ -404,6 +429,8 @@ async def process_entity(client, entity_id, entity_name, entity, limit=None, dow
             media_file = None
             media_hash = None
             is_service_message = False
+            is_voice_message = False
+            is_pinned = message.pinned
             
             if hasattr(message, 'action') and message.action:
                 action_dict = message.action.to_dict()
@@ -481,10 +508,18 @@ async def process_entity(client, entity_id, entity_name, entity, limit=None, dow
             if message.media:
                 media_type = message_dict["media"]["_"]
                 
+                if media_type == "MessageMediaDocument":
+                    if hasattr(message.media, "document") and hasattr(message.media.document, "attributes"):
+                        for attr in message.media.document.attributes:
+                            if hasattr(attr, "_") and attr._ == "DocumentAttributeAudio":
+                                if hasattr(attr, "voice") and attr.voice:
+                                    is_voice_message = True
+                
                 if download_media:
                     if not await media_exists(cursor, entity_id, id, media_type):
                         try:
-                            media_file = await message.download_media(file=f"media/{entity_id}/")
+                            os.makedirs(f"media/{entity_id}", exist_ok=True)
+                            media_file = await message.download_media(file=f"media/{entity_id}")
                             if media_file:
                                 media_hash = get_file_hash(media_file)
                         except Exception as e:
@@ -498,6 +533,7 @@ async def process_entity(client, entity_id, entity_name, entity, limit=None, dow
             
             forwarded = str(message.fwd_from) if message.fwd_from else None
             from_id = str(message.from_id)
+            user_id = extract_user_id(from_id)
             views = message.views
             
             sender_name = None
@@ -522,13 +558,18 @@ async def process_entity(client, entity_id, entity_name, entity, limit=None, dow
                             try:
                                 fwd_channel = await client.get_entity(message.fwd_from.channel_id)
                                 if hasattr(fwd_channel, 'title'):
-                                    sender_name = f"{fwd_channel.title} (reenviado)"
+                                    sender_name = f"{fwd_channel.title} (forwarded)"
                             except:
                                 pass
                 except Exception as e:
-                    print(f"Error determinando remitente del mensaje {id}: {e}")
+                    print(f"Error determining message sender {id}: {e}")
             
             reply_to_msg_id = message.reply_to_msg_id if message.reply_to_msg_id else None
+            quote_text = None
+            
+            if hasattr(message, 'reply_to') and message.reply_to:
+                if hasattr(message.reply_to, 'quote_text'):
+                    quote_text = message.reply_to.quote_text
             
             reactions_json = None
             if hasattr(message, 'reactions') and message.reactions:
@@ -544,16 +585,17 @@ async def process_entity(client, entity_id, entity_name, entity, limit=None, dow
             cursor.execute("""
             INSERT OR IGNORE INTO messages 
             (id, entity_id, date, text, media_type, media_file, media_hash, forwarded, from_id, views, 
-            sender_name, reply_to_msg_id, reactions, web_preview, extraction_time, is_service_message) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            sender_name, reply_to_msg_id, reactions, web_preview, extraction_time, is_service_message,
+            is_voice_message, is_pinned, user_id) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (int(id), int(entity_id), date, text, media_type, media_file, media_hash, forwarded, from_id, 
                  views if views is not None else 0, sender_name, 
                  int(reply_to_msg_id) if reply_to_msg_id is not None else None, 
-                 reactions_json, web_preview, extraction_time, is_service_message))
+                 reactions_json, web_preview, extraction_time, is_service_message, is_voice_message, is_pinned, user_id))
             
             if reply_to_msg_id:
-                cursor.execute("INSERT OR IGNORE INTO replies VALUES (?, ?, ?)",
-                              (int(id), int(entity_id), int(reply_to_msg_id)))
+                cursor.execute("INSERT OR IGNORE INTO replies VALUES (?, ?, ?, ?)",
+                              (int(id), int(entity_id), int(reply_to_msg_id), quote_text))
             
             if message.buttons:
                 for i, row in enumerate(message.buttons):
@@ -585,13 +627,13 @@ async def process_entity(client, entity_id, entity_name, entity, limit=None, dow
     generate_html(db_name, sanitized_name, entity_id)
 
 async def update_entity(client, entity_id, entity_name, entity, download_media=False):
-    print(f"\nActualizando: {entity_name} (ID: {entity_id})")
+    print(f"\nUpdating: {entity_name} (ID: {entity_id})")
     
     sanitized_name = sanitize_filename(f"{entity_id}_{entity_name}")
     db_name = f"{sanitized_name}.db"
     
     if not os.path.exists(db_name):
-        print(f"No se encontró una base de datos existente para {entity_name}. Creando nuevo respaldo...")
+        print(f"No existing database found for {entity_name}. Creating new backup...")
         await process_entity(client, entity_id, entity_name, entity, download_media=download_media)
         return
     
@@ -600,16 +642,59 @@ async def update_entity(client, entity_id, entity_name, entity, download_media=F
     
     cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='messages'")
     if not cursor.fetchone():
-        print(f"La base de datos existe pero no tiene la estructura correcta. Creando nuevo respaldo...")
+        print(f"Database exists but doesn't have the correct structure. Creating new backup...")
         conn.close()
         await process_entity(client, entity_id, entity_name, entity, download_media=download_media)
         return
     
     cursor.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='messages'")
     table_schema = cursor.fetchone()[0]
+    
     if 'is_service_message' not in table_schema:
         print("Updating database schema to include service message information...")
         cursor.execute("ALTER TABLE messages ADD COLUMN is_service_message BOOLEAN DEFAULT 0")
+    
+    if 'is_voice_message' not in table_schema:
+        print("Updating database schema to include voice message information...")
+        cursor.execute("ALTER TABLE messages ADD COLUMN is_voice_message BOOLEAN DEFAULT 0")
+    
+    if 'is_pinned' not in table_schema:
+        print("Updating database schema to include pinned message information...")
+        cursor.execute("ALTER TABLE messages ADD COLUMN is_pinned BOOLEAN DEFAULT 0")
+        
+    if 'user_id' not in table_schema:
+        print("Updating database schema to include clean user ID information...")
+        cursor.execute("ALTER TABLE messages ADD COLUMN user_id TEXT")
+        
+        print("Processing existing records to extract user IDs...")
+        cursor.execute("SELECT id, entity_id, from_id FROM messages")
+        for row in cursor.fetchall():
+            msg_id, entity_id, from_id = row
+            user_id = extract_user_id(from_id)
+            if user_id:
+                cursor.execute("UPDATE messages SET user_id = ? WHERE id = ? AND entity_id = ?", 
+                              (user_id, msg_id, entity_id))
+    
+    conn.commit()
+    
+    # Check if replies table has quote_text column
+    cursor.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='replies'")
+    replies_schema = cursor.fetchone()
+    
+    if replies_schema:
+        if 'quote_text' not in replies_schema[0]:
+            print("Updating replies table to include quote text information...")
+            cursor.execute("ALTER TABLE replies ADD COLUMN quote_text TEXT")
+            conn.commit()
+    else:
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS replies (
+            message_id INTEGER,
+            entity_id INTEGER,
+            reply_to_msg_id INTEGER,
+            quote_text TEXT,
+            UNIQUE(message_id, entity_id)
+        )""")
         conn.commit()
     
     extraction_time = datetime.datetime.now(datetime.timezone.utc).isoformat()
@@ -618,8 +703,8 @@ async def update_entity(client, entity_id, entity_name, entity, download_media=F
     result = cursor.fetchone()
     last_msg_id = result[0] if result[0] is not None else 0
     
-    print(f"Último mensaje en la base de datos: {last_msg_id}")
-    print("Recuperando mensajes más recientes...")
+    print(f"Last message in database: {last_msg_id}")
+    print("Retrieving more recent messages...")
     
     new_messages_count = 0
     
@@ -636,6 +721,8 @@ async def update_entity(client, entity_id, entity_name, entity, download_media=F
             media_file = None
             media_hash = None
             is_service_message = False
+            is_voice_message = False
+            is_pinned = message.pinned
             
             if hasattr(message, 'action') and message.action:
                 action_dict = message.action.to_dict()
@@ -713,6 +800,13 @@ async def update_entity(client, entity_id, entity_name, entity, download_media=F
             if message.media:
                 media_type = message_dict["media"]["_"]
                 
+                if media_type == "MessageMediaDocument":
+                    if hasattr(message.media, "document") and hasattr(message.media.document, "attributes"):
+                        for attr in message.media.document.attributes:
+                            if hasattr(attr, "_") and attr._ == "DocumentAttributeAudio":
+                                if hasattr(attr, "voice") and attr.voice:
+                                    is_voice_message = True
+                
                 if download_media:
                     if not await media_exists(cursor, entity_id, id, media_type):
                         try:
@@ -724,6 +818,7 @@ async def update_entity(client, entity_id, entity_name, entity, download_media=F
             
             forwarded = str(message.fwd_from) if message.fwd_from else None
             from_id = str(message.from_id)
+            user_id = extract_user_id(from_id)
             views = message.views
             
             sender_name = None
@@ -748,13 +843,18 @@ async def update_entity(client, entity_id, entity_name, entity, download_media=F
                             try:
                                 fwd_channel = await client.get_entity(message.fwd_from.channel_id)
                                 if hasattr(fwd_channel, 'title'):
-                                    sender_name = f"{fwd_channel.title} (reenviado)"
+                                    sender_name = f"{fwd_channel.title} (forwarded)"
                             except:
                                 pass
                 except Exception as e:
-                    print(f"Error determinando remitente del mensaje {id}: {e}")
+                    print(f"Error determining message sender {id}: {e}")
             
             reply_to_msg_id = message.reply_to_msg_id if message.reply_to_msg_id else None
+            quote_text = None
+            
+            if hasattr(message, 'reply_to') and message.reply_to:
+                if hasattr(message.reply_to, 'quote_text'):
+                    quote_text = message.reply_to.quote_text
             
             reactions_json = None
             if hasattr(message, 'reactions') and message.reactions:
@@ -770,36 +870,39 @@ async def update_entity(client, entity_id, entity_name, entity, download_media=F
             cursor.execute("""
             INSERT OR IGNORE INTO messages 
             (id, entity_id, date, text, media_type, media_file, media_hash, forwarded, from_id, views, 
-            sender_name, reply_to_msg_id, reactions, web_preview, extraction_time, is_service_message) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            sender_name, reply_to_msg_id, reactions, web_preview, extraction_time, is_service_message,
+            is_voice_message, is_pinned, user_id) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (int(id), int(entity_id), date, text, media_type, media_file, media_hash, forwarded, from_id, 
                  views if views is not None else 0, sender_name, 
                  int(reply_to_msg_id) if reply_to_msg_id is not None else None, 
-                 reactions_json, web_preview, extraction_time, is_service_message))
+                 reactions_json, web_preview, extraction_time, is_service_message, is_voice_message, is_pinned, user_id))
             
             if reply_to_msg_id:
-                cursor.execute("INSERT OR REPLACE INTO replies VALUES (?, ?, ?)",
-                              (id, entity_id, reply_to_msg_id))
+                cursor.execute("INSERT OR REPLACE INTO replies VALUES (?, ?, ?, ?)",
+                              (int(id), int(entity_id), int(reply_to_msg_id), quote_text))
             
             if message.buttons:
                 for i, row in enumerate(message.buttons):
                     for j, button in enumerate(row):
                         cursor.execute("INSERT OR IGNORE INTO buttons VALUES (?, ?, ?, ?, ?, ?, ?)",
-                                       (id, entity_id, i, j, button.text, button.data, button.url))
+                                       (int(id), int(entity_id), int(i), int(j), str(button.text), 
+                                        str(button.data) if button.data else None, 
+                                        str(button.url) if button.url else None))
             
             if text and not is_service_message:
                 soup = BeautifulSoup(text, "html.parser")
                 for link in soup.find_all('a'):
                     cursor.execute("INSERT OR IGNORE INTO buttons VALUES (?, ?, ?, ?, ?, ?, ?)",
-                                   (id, entity_id, 0, 0, link.text, None, link['href']))
+                                   (int(id), int(entity_id), 0, 0, str(link.text), None, str(link['href'])))
             
             conn.commit()
             new_messages_count += 1
-            print(f"Mensaje {id} procesado", end='\r')
+            print(f"Message {id} processed", end='\r')
         
-        print(f"\nActualización completada. {new_messages_count} mensajes nuevos añadidos a {entity_name}.")
+        print(f"\nUpdate completed. {new_messages_count} new messages added to {entity_name}.")
     except Exception as e:
-        print(f"Error al actualizar mensajes: {e}")
+        print(f"Error updating messages: {e}")
     finally:
         conn.close()
     
@@ -821,7 +924,7 @@ def generate_html(db_name, chat_name, entity_id=None):
            m.sender_name, m.reply_to_msg_id, m.reactions, m.entity_id, m.web_preview,
            GROUP_CONCAT(b.text || ',' || b.url, '|') as buttons,
            GROUP_CONCAT(r.emoji || ':' || r.count, ',') as reactions,
-           m.is_service_message
+           m.is_service_message, m.is_voice_message, m.is_pinned, m.user_id
     FROM messages m 
     LEFT JOIN buttons b ON m.id = b.message_id AND m.entity_id = b.entity_id
     LEFT JOIN reactions r ON m.id = r.message_id AND m.entity_id = r.entity_id
@@ -830,6 +933,39 @@ def generate_html(db_name, chat_name, entity_id=None):
     ORDER BY m.date DESC
     """, params)
     messages = cursor.fetchall()
+    
+    # Create a lookup dictionary for all messages by ID
+    message_lookup = {msg[0]: msg for msg in messages}
+    
+    # Function to get message by ID for the template
+    def get_message_by_id(msg_id):
+        try:
+            msg_id = int(msg_id)
+            return message_lookup.get(msg_id)
+        except (ValueError, TypeError):
+            return None
+    
+    # Function to get text preview of a message for reply display
+    def get_reply_preview(msg_id, max_length=30):
+        msg = get_message_by_id(msg_id)
+        if not msg:
+            return "Message not found"
+        
+        sender = msg[8] if msg[8] else "Unknown"
+        text = msg[2]
+        
+        if not text:
+            if msg[3]:  # Check if it has media
+                text = f"Media message"
+            elif msg[15]:  # Check if it's a service message
+                text = "Service message"
+            else:
+                text = "Empty message"
+        
+        if len(text) > max_length:
+            text = text[:max_length] + "..."
+            
+        return f"{sender}: {text}"
     
     if entity_id is not None:
         date_groups = {}
@@ -875,7 +1011,9 @@ def generate_html(db_name, chat_name, entity_id=None):
         entity_id=entity_id,
         os=os,
         get_url_from_forwarded=get_url_from_forwarded,
-        json=json
+        json=json,
+        get_message_by_id=get_message_by_id,
+        get_reply_preview=get_reply_preview
     )
     
     with open(f"{chat_name}.html", "w", encoding='utf-8') as f:
