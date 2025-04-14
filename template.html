@@ -98,6 +98,12 @@
             font-weight: bold;
             margin-bottom: 4px;
         }
+        .sender-id {
+            color: #8fabc2;
+            font-size: 0.8em;
+            font-weight: normal;
+            margin-left: 5px;
+        }
         .message-time {
             float: right;
             color: #a0a0a0;
@@ -137,21 +143,80 @@
             overflow: hidden;
             text-overflow: ellipsis;
         }
+        .message-reply-sender {
+            color: #3a6d99;
+            font-weight: bold;
+            margin-right: 4px;
+        }
+        .message-reply-text {
+            color: #5a5a5a;
+        }
         .reply-preview {
             display: none;
-            position: absolute;
-            width: 300px;
+            position: fixed;
+            width: 400px;
+            max-height: 500px;
+            overflow-y: auto;
             background-color: white;
             border: 1px solid #ccc;
             border-radius: 8px;
-            padding: 10px;
+            padding: 15px;
             box-shadow: 0 2px 10px rgba(0,0,0,0.2);
             z-index: 1000;
-            left: 30px;
-            top: 0;
+            right: 20px;
+            top: 70px;
+        }
+        .message.from-self .reply-preview {
+            /* No custom positioning for self messages */
         }
         .message-reply:hover .reply-preview {
             display: block;
+        }
+        .preview-content {
+            width: 100%;
+            border-radius: 6px;
+            overflow: hidden;
+            margin-bottom: 8px;
+            border: 1px solid #eaeaea;
+            padding: 8px;
+            background-color: #f9f9f9;
+        }
+        .preview-content .message-sender {
+            font-size: 0.9em;
+        }
+        .preview-content .message-content {
+            font-size: 0.9em;
+        }
+        .reply-chain {
+            margin-top: 8px;
+            border-top: 1px solid #eee;
+            padding-top: 8px;
+        }
+        .reply-chain-title {
+            font-weight: bold;
+            color: #3a6d99;
+            margin-bottom: 5px;
+            font-size: 0.9em;
+        }
+        .reply-chain-item {
+            padding: 4px 6px;
+            margin: 2px 0;
+            border-radius: 4px;
+            background-color: #f5f5f5;
+            font-size: 0.85em;
+        }
+        .reply-chain-item:hover {
+            background-color: rgba(86, 130, 163, 0.1);
+        }
+        .reply-chain-link {
+            color: #3a6d99;
+            text-decoration: none;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .reply-chain-link:hover {
+            text-decoration: underline;
         }
         .reactions {
             display: flex;
@@ -231,11 +296,25 @@
             background-color: #5682a3;
             color: white;
         }
-        .date-selector {
+        .controls {
             position: fixed;
             bottom: 20px;
             right: 20px;
             z-index: 100;
+            display: flex;
+            gap: 10px;
+        }
+        .date-selector {
+            background-color: #5682a3;
+            color: white;
+            border: none;
+            padding: 8px 15px;
+            border-radius: 20px;
+            font-size: 14px;
+            cursor: pointer;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        }
+        .order-toggle {
             background-color: #5682a3;
             color: white;
             border: none;
@@ -247,10 +326,17 @@
         }
         .back-to-ref {
             display: inline-block;
-            margin-left: 5px;
-            color: #3a6d99;
+            margin: 10px 0;
+            color: white;
             cursor: pointer;
-            font-size: 0.8em;
+            font-size: 0.9em;
+            background-color: #5682a3;
+            padding: 5px 10px;
+            border-radius: 5px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+        }
+        .back-to-ref:hover {
+            background-color: #4b7498;
         }
         #highlightResults {
             position: fixed;
@@ -263,14 +349,170 @@
             z-index: 101;
             display: none;
         }
+        .media-label {
+            font-size: 0.85em;
+            color: #5682a3;
+            margin-bottom: 5px;
+            font-style: italic;
+        }
+        .media-filename {
+            font-size: 0.8em;
+            color: #777;
+            margin-left: 5px;
+            font-style: normal;
+        }
+        .pinned-message {
+            position: relative;
+        }
+        .pinned-message:before {
+            content: "📌";
+            position: absolute;
+            top: -10px;
+            right: 5px;
+            font-size: 16px;
+            color: #5682a3;
+        }
+        #replyNavigator {
+            position: sticky;
+            top: 60px;
+            margin: 10px 0;
+            z-index: 90;
+            background-color: rgba(255, 255, 255, 0.95);
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+            padding: 10px;
+            display: none;
+        }
+        .reply-nav-header {
+            font-weight: bold;
+            color: #3a6d99;
+            margin-bottom: 5px;
+            text-align: center;
+        }
+        .reply-chain-container {
+            max-height: 200px;
+            overflow-y: auto;
+            margin-bottom: 10px;
+            border: 1px solid #eee;
+            border-radius: 5px;
+            padding: 5px;
+        }
+        .reply-nav-buttons {
+            display: flex;
+            justify-content: space-between;
+        }
+        .reply-nav-button {
+            color: white;
+            cursor: pointer;
+            font-size: 0.9em;
+            background-color: #5682a3;
+            padding: 5px 10px;
+            border-radius: 5px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+            border: none;
+            flex-grow: 1;
+            margin: 0 5px;
+            text-align: center;
+        }
+        .reply-nav-button:hover {
+            background-color: #4b7498;
+        }
+        .reply-nav-button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+        .reply-chain-entry {
+            display: flex;
+            align-items: center;
+            padding: 5px;
+            margin: 3px 0;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        .reply-chain-entry:hover {
+            background-color: rgba(86, 130, 163, 0.1);
+        }
+        .reply-chain-entry.active {
+            background-color: rgba(86, 130, 163, 0.2);
+            font-weight: bold;
+        }
+        .reply-chain-entry.original-message {
+            background-color: rgba(86, 130, 163, 0.3);
+            border-left: 3px solid #5682a3;
+            position: relative;
+        }
+        .reply-chain-entry.original-message::before {
+            content: "Original";
+            position: absolute;
+            right: 5px;
+            top: 5px;
+            font-size: 10px;
+            background-color: #5682a3;
+            color: white;
+            padding: 2px 5px;
+            border-radius: 3px;
+        }
+        .reply-chain-entry-avatar {
+            width: 24px;
+            height: 24px;
+            border-radius: 12px;
+            background-color: #5682a3;
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-right: 8px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        .reply-chain-entry-content {
+            flex-grow: 1;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .reply-chain-entry-sender {
+            font-weight: bold;
+            color: #3a6d99;
+        }
+        .in-message-preview {
+            font-size: 0.85em;
+            color: #666;
+            margin-top: 3px;
+            padding: 5px;
+            background-color: #f9f9f9;
+            border-radius: 4px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .highlighted-message {
+            animation: highlight-pulse 1.5s ease-out;
+        }
+        @keyframes highlight-pulse {
+            0% { background-color: inherit; }
+            20% { background-color: #ffffd0; }
+            100% { background-color: inherit; }
+        }
     </style>
 </head>
 <body>
     <div class="header">
         <div class="search-box">
-            <input type="text" id="searchInput" placeholder="Buscar en mensajes...">
+            <input type="text" id="searchInput" placeholder="Search messages...">
         </div>
         <div class="header-title">{{chat_name}}</div>
+    </div>
+    <div id="replyNavigator">
+        <div class="reply-nav-header">Reply Chain Navigator</div>
+        <div class="reply-chain-container" id="replyChainContainer">
+        </div>
+        <div class="reply-nav-buttons">
+            <button class="reply-nav-button" id="prevReplyButton" disabled>◀ Previous</button>
+            <button class="reply-nav-button" id="closeReplyNavButton">Close</button>
+            <button class="reply-nav-button" id="returnToOriginButton">Return to Origin</button>
+            <button class="reply-nav-button" id="nextReplyButton" disabled>Next ▶</button>
+        </div>
     </div>
     <div class="container">
         <div class="message-container" id="messageContainer">
@@ -283,26 +525,37 @@
                     {% set fullDateTime = msgDate ~ " " ~ msgTime ~ " UTC" %}
                     {% set from_self = message[6] == "PeerUser" %}
                     {% set is_service = message[15] or (message[2] and message[2].startswith('<service>')) %}
+                    {% set is_voice_message = message[16] %}
+                    {% set is_pinned = message[17] %}
+                    {% set user_id = message[18] %}
+                    {% set filename = message[4].split('/')[-1] if message[4] else '' %}
                     
                     {% if is_service %}
-                        <div id="msg{{message[0]}}" class="service-message">
+                        <div id="msg{{message[0]}}" class="service-message" data-msg-id="{{message[0]}}">
                             {{ message[2].replace('<service>', '').replace('</service>', '') }}
                             <div class="message-time">{{ fullDateTime }}</div>
                         </div>
                     {% elif message[9] %}
-                        <div id="msg{{message[0]}}" class="message {% if from_self %}from-self{% else %}from-other{% endif %}">
+                        <div id="msg{{message[0]}}" class="message {% if from_self %}from-self{% else %}from-other{% endif %} {% if is_pinned %}pinned-message{% endif %}" data-msg-id="{{message[0]}}" data-reply-to="msg{{message[9]}}" data-sender="{{message[8] if message[8] else 'Unknown'}}" data-time="{{fullDateTime}}">
                             {% if message[8] and not from_self %}
-                                <div class="message-sender">{{message[8] if message[8] else "Desconocido"}}</div>
+                                <div class="message-sender">
+                                    {{message[8] if message[8] else "Unknown"}}
+                                    {% if user_id %}
+                                        <span class="sender-id">(ID: {{user_id}})</span>
+                                    {% endif %}
+                                </div>
                             {% endif %}
                             
                             <div class="message-reply">
-                                <a href="#msg{{message[9]}}" class="message-link" data-origin="msg{{message[0]}}">
-                                    <div class="message-reply-content">↩️ En respuesta a un mensaje</div>
+                                <a href="#msg{{message[9]}}" class="message-link reply-link" data-origin="msg{{message[0]}}" data-target="msg{{message[9]}}">
+                                    <div class="message-reply-content">
+                                        ↩️ <span class="message-reply-sender">{{ get_reply_preview(message[9], 30).split(': ')[0] }}</span>
+                                        <span class="message-reply-text">{{ get_reply_preview(message[9], 30).split(': ')[1] if ':' in get_reply_preview(message[9], 30) else get_reply_preview(message[9], 30) }}</span>
+                                    </div>
                                 </a>
                                 <div class="reply-preview" id="preview-{{message[9]}}">
-                                    Cargando...
+                                    Loading...
                                 </div>
-                                <a class="back-to-ref" style="display:none;" id="back-to-msg{{message[0]}}">Volver</a>
                             </div>
                             
                             {% if message[5] %}
@@ -317,6 +570,84 @@
                                 {% endif %}
                                 
                                 {% if message[4] %}
+                                    {% if is_voice_message %}
+                                        <div class="media-label">Voice message: <span class="media-filename">{{filename}}</span></div>
+                                    {% elif message[3] == 'MessageMediaPhoto' %}
+                                        <div class="media-label">Photo: <span class="media-filename">{{filename}}</span></div>
+                                    {% elif message[3] == 'MessageMediaDocument' and message[4] and (message[4].lower().endswith('.mp4') or message[4].lower().endswith('.webm')) %}
+                                        <div class="media-label">Video: <span class="media-filename">{{filename}}</span></div>
+                                    {% elif message[3] == 'MessageMediaDocument' and message[4] and (message[4].lower().endswith('.mp3') or message[4].lower().endswith('.flac')) %}
+                                        <div class="media-label">Music file: <span class="media-filename">{{filename}}</span></div>
+                                        <audio controls>
+                                            {% if message[4].lower().endswith('.mp3') %}
+                                            <source src="{{message[4]}}" type="audio/mpeg">
+                                            {% elif message[4].lower().endswith('.flac') %}
+                                            <source src="{{message[4]}}" type="audio/flac">
+                                            {% endif %}
+                                            Your browser does not support the audio tag.
+                                        </audio>
+                                    {% elif message[3] == 'MessageMediaDocument' and message[4] and (message[4].lower().endswith('.ogg') or message[4].lower().endswith('.oga') or (filename and filename.startswith('voice_'))) %}
+                                        <div class="media-label">Voice recording: <span class="media-filename">{{filename}}</span></div>
+                                        <audio controls>
+                                            <source src="{{message[4]}}" type="audio/ogg">
+                                            Your browser does not support the audio tag.
+                                        </audio>
+                                    {% elif message[3] == 'MessageMediaDocument' and message[4] and (message[4].lower().endswith('.m4a') or message[4].lower().endswith('.aac') or message[4].lower().endswith('.wav')) %}
+                                        <div class="media-label">Audio file: <span class="media-filename">{{filename}}</span></div>
+                                        <audio controls>
+                                            {% if message[4].lower().endswith('.m4a') %}
+                                            <source src="{{message[4]}}" type="audio/mp4">
+                                            {% elif message[4].lower().endswith('.aac') %}
+                                            <source src="{{message[4]}}" type="audio/aac">
+                                            {% elif message[4].lower().endswith('.wav') %}
+                                            <source src="{{message[4]}}" type="audio/wav">
+                                            {% endif %}
+                                            Your browser does not support the audio tag.
+                                        </audio>
+                                    {% elif message[3] == 'MessageMediaDocument' %}
+                                        {% set file_ext = filename.split('.')[-1]|lower if '.' in filename else '' %}
+                                        {% if file_ext == 'mp3' or file_ext == 'flac' %}
+                                            <div class="media-label">Music file: <span class="media-filename">{{filename}}</span></div>
+                                            <audio controls>
+                                                {% if file_ext == 'mp3' %}
+                                                <source src="{{message[4]}}" type="audio/mpeg">
+                                                {% elif file_ext == 'flac' %}
+                                                <source src="{{message[4]}}" type="audio/flac">
+                                                {% endif %}
+                                                Your browser does not support the audio tag.
+                                            </audio>
+                                        {% elif file_ext == 'ogg' or file_ext == 'oga' or filename.startswith('voice_') %}
+                                            <div class="media-label">Voice recording: <span class="media-filename">{{filename}}</span></div>
+                                            <audio controls>
+                                                <source src="{{message[4]}}" type="audio/ogg">
+                                                Your browser does not support the audio tag.
+                                            </audio>
+                                        {% elif file_ext == 'm4a' or file_ext == 'aac' or file_ext == 'wav' %}
+                                            <div class="media-label">Audio file: <span class="media-filename">{{filename}}</span></div>
+                                            <audio controls>
+                                                {% if file_ext == 'm4a' %}
+                                                <source src="{{message[4]}}" type="audio/mp4">
+                                                {% elif file_ext == 'aac' %}
+                                                <source src="{{message[4]}}" type="audio/aac">
+                                                {% elif file_ext == 'wav' %}
+                                                <source src="{{message[4]}}" type="audio/wav">
+                                                {% endif %}
+                                                Your browser does not support the audio tag.
+                                            </audio>
+                                        {% elif file_ext == 'mp4' or file_ext == 'webm' %}
+                                            <div class="media-label">Video: <span class="media-filename">{{filename}}</span></div>
+                                            <video controls class="message-media">
+                                                <source src="{{message[4]}}" type="{% if file_ext == 'mp4' %}video/mp4{% else %}video/webm{% endif %}">
+                                                Your browser does not support the video tag.
+                                            </video>
+                                        {% elif file_ext == 'webp' %}
+                                            <div class="media-label">Sticker: <span class="media-filename">{{filename}}</span></div>
+                                            <img src="{{message[4]}}" alt="Sticker" class="message-media">
+                                        {% else %}
+                                            <div class="media-label">File: <span class="media-filename">{{filename}}</span></div>
+                                        {% endif %}
+                                    {% endif %}
+                                    
                                     {% if message[3] == 'MessageMediaPhoto' %}
                                         <img src="{{message[4]}}" alt="Photo" class="message-media">
                                     {% elif message[3] == 'MessageMediaDocument' and message[4] and (message[4].lower().endswith('.mp4') or message[4].lower().endswith('.webm')) %}
@@ -324,18 +655,59 @@
                                             <source src="{{message[4]}}" type="video/mp4">
                                             Your browser does not support the video tag.
                                         </video>
-                                    {% elif message[3] == 'MessageMediaDocument' and message[4] and (message[4].lower().endswith('.mp3') or message[4].lower().endswith('.ogg') or message[4].lower().endswith('.m4a') or message[4].lower().endswith('.oga')) %}
+                                    {% elif message[3] == 'MessageMediaDocument' and message[4] and (message[4].lower().endswith('.mp3') or message[4].lower().endswith('.ogg') or message[4].lower().endswith('.m4a') or message[4].lower().endswith('.oga') or message[4].lower().endswith('.flac') or message[4].lower().endswith('.aac') or message[4].lower().endswith('.wav')) %}
                                         <audio controls>
+                                            {% if message[4].lower().endswith('.mp3') %}
                                             <source src="{{message[4]}}" type="audio/mpeg">
+                                            {% elif message[4].lower().endswith('.ogg') or message[4].lower().endswith('.oga') %}
+                                            <source src="{{message[4]}}" type="audio/ogg">
+                                            {% elif message[4].lower().endswith('.m4a') %}
+                                            <source src="{{message[4]}}" type="audio/mp4">
+                                            {% elif message[4].lower().endswith('.flac') %}
+                                            <source src="{{message[4]}}" type="audio/flac">
+                                            {% elif message[4].lower().endswith('.aac') %}
+                                            <source src="{{message[4]}}" type="audio/aac">
+                                            {% elif message[4].lower().endswith('.wav') %}
+                                            <source src="{{message[4]}}" type="audio/wav">
+                                            {% else %}
+                                            <source src="{{message[4]}}" type="audio/mpeg">
+                                            {% endif %}
                                             Your browser does not support the audio tag.
                                         </audio>
-                                    {% elif message[3] == 'MessageMediaVoice' or (message[3] == 'MessageMediaDocument' and message[4] and message[4].lower().endswith('.oga')) %}
+                                    {% elif is_voice_message or (message[3] == 'MessageMediaDocument' and message[4] and message[4].lower().endswith('.oga')) %}
                                         <audio controls>
                                             <source src="{{message[4]}}" type="audio/ogg">
                                             Your browser does not support the audio tag.
                                         </audio>
                                     {% else %}
-                                        <a href="{{message[4]}}" class="btn btn-primary" target="_blank">Download media</a>
+                                        {% set file_ext = filename.split('.')[-1]|lower if '.' in filename else '' %}
+                                        {% if file_ext in ['mp3', 'ogg', 'm4a', 'oga', 'flac', 'aac', 'wav'] %}
+                                            <audio controls>
+                                                {% if file_ext == 'mp3' %}
+                                                <source src="{{message[4]}}" type="audio/mpeg">
+                                                {% elif file_ext == 'ogg' or file_ext == 'oga' %}
+                                                <source src="{{message[4]}}" type="audio/ogg">
+                                                {% elif file_ext == 'm4a' %}
+                                                <source src="{{message[4]}}" type="audio/mp4">
+                                                {% elif file_ext == 'flac' %}
+                                                <source src="{{message[4]}}" type="audio/flac">
+                                                {% elif file_ext == 'aac' %}
+                                                <source src="{{message[4]}}" type="audio/aac">
+                                                {% elif file_ext == 'wav' %}
+                                                <source src="{{message[4]}}" type="audio/wav">
+                                                {% else %}
+                                                <source src="{{message[4]}}" type="audio/mpeg">
+                                                {% endif %}
+                                                Your browser does not support the audio tag.
+                                            </audio>
+                                        {% elif file_ext in ['mp4', 'webm'] %}
+                                            <video controls class="message-media">
+                                                <source src="{{message[4]}}" type="{% if file_ext == 'mp4' %}video/mp4{% else %}video/webm{% endif %}">
+                                                Your browser does not support the video tag.
+                                            </video>
+                                        {% else %}
+                                            <a href="{{message[4]}}" class="btn btn-primary" target="_blank">Open media</a>
+                                        {% endif %}
                                     {% endif %}
                                 {% endif %}
                                 
@@ -400,9 +772,14 @@
                         </div>
                         <div class="clearfix"></div>
                     {% else %}
-                        <div id="msg{{message[0]}}" class="message {% if from_self %}from-self{% else %}from-other{% endif %}">
+                        <div id="msg{{message[0]}}" class="message {% if from_self %}from-self{% else %}from-other{% endif %} {% if is_pinned %}pinned-message{% endif %}" data-msg-id="{{message[0]}}" data-sender="{{message[8] if message[8] else 'Unknown'}}" data-time="{{fullDateTime}}">
                             {% if message[8] and not from_self %}
-                                <div class="message-sender">{{message[8] if message[8] else "Desconocido"}}</div>
+                                <div class="message-sender">
+                                    {{message[8] if message[8] else "Unknown"}}
+                                    {% if user_id %}
+                                        <span class="sender-id">(ID: {{user_id}})</span>
+                                    {% endif %}
+                                </div>
                             {% endif %}
                             
                             {% if message[5] %}
@@ -417,6 +794,18 @@
                                 {% endif %}
                                 
                                 {% if message[4] %}
+                                    {% if is_voice_message %}
+                                        <div class="media-label">Voice message: <span class="media-filename">{{filename}}</span></div>
+                                    {% elif message[3] == 'MessageMediaPhoto' %}
+                                        <div class="media-label">Photo: <span class="media-filename">{{filename}}</span></div>
+                                    {% elif message[3] == 'MessageMediaDocument' and message[4] and (message[4].lower().endswith('.mp4') or message[4].lower().endswith('.webm')) %}
+                                        <div class="media-label">Video: <span class="media-filename">{{filename}}</span></div>
+                                    {% elif message[3] == 'MessageMediaDocument' and message[4] and (message[4].lower().endswith('.mp3') or message[4].lower().endswith('.ogg') or message[4].lower().endswith('.m4a') or message[4].lower().endswith('.oga') or message[4].lower().endswith('.flac') or message[4].lower().endswith('.aac') or message[4].lower().endswith('.wav')) %}
+                                        <div class="media-label">Audio file: <span class="media-filename">{{filename}}</span></div>
+                                    {% elif message[3] == 'MessageMediaDocument' %}
+                                        <div class="media-label">File: <span class="media-filename">{{filename}}</span></div>
+                                    {% endif %}
+                                    
                                     {% if message[3] == 'MessageMediaPhoto' %}
                                         <img src="{{message[4]}}" alt="Photo" class="message-media">
                                     {% elif message[3] == 'MessageMediaDocument' and message[4] and (message[4].lower().endswith('.mp4') or message[4].lower().endswith('.webm')) %}
@@ -424,18 +813,18 @@
                                             <source src="{{message[4]}}" type="video/mp4">
                                             Your browser does not support the video tag.
                                         </video>
-                                    {% elif message[3] == 'MessageMediaDocument' and message[4] and (message[4].lower().endswith('.mp3') or message[4].lower().endswith('.ogg') or message[4].lower().endswith('.m4a') or message[4].lower().endswith('.oga')) %}
+                                    {% elif message[3] == 'MessageMediaDocument' and message[4] and (message[4].lower().endswith('.mp3') or message[4].lower().endswith('.ogg') or message[4].lower().endswith('.m4a') or message[4].lower().endswith('.oga') or message[4].lower().endswith('.flac') or message[4].lower().endswith('.aac') or message[4].lower().endswith('.wav')) %}
                                         <audio controls>
                                             <source src="{{message[4]}}" type="audio/mpeg">
                                             Your browser does not support the audio tag.
                                         </audio>
-                                    {% elif message[3] == 'MessageMediaVoice' or (message[3] == 'MessageMediaDocument' and message[4] and message[4].lower().endswith('.oga')) %}
+                                    {% elif is_voice_message or (message[3] == 'MessageMediaDocument' and message[4] and message[4].lower().endswith('.oga')) %}
                                         <audio controls>
                                             <source src="{{message[4]}}" type="audio/ogg">
                                             Your browser does not support the audio tag.
                                         </audio>
                                     {% else %}
-                                        <a href="{{message[4]}}" class="btn btn-primary" target="_blank">Download media</a>
+                                        <a href="{{message[4]}}" class="btn btn-primary" target="_blank">Open media</a>
                                     {% endif %}
                                 {% endif %}
                                 
@@ -505,12 +894,15 @@
         </div>
     </div>
     
-    <select class="date-selector" id="dateSelector">
-        <option value="">Ir a fecha...</option>
-        {% for date, _ in grouped_messages %}
-            <option value="date-{{date|replace(' ', '-')|replace(',', '')}}">{{date}}</option>
-        {% endfor %}
-    </select>
+    <div class="controls">
+        <button class="order-toggle" id="orderToggle">Newest First</button>
+        <select class="date-selector" id="dateSelector">
+            <option value="">Go to date...</option>
+            {% for date, _ in grouped_messages %}
+                <option value="date-{{date|replace(' ', '-')|replace(',', '')}}">{{date}}</option>
+            {% endfor %}
+        </select>
+    </div>
     
     <div id="highlightResults">
         <span id="resultCount"></span>
@@ -520,38 +912,540 @@
     
     <script>
         document.addEventListener('DOMContentLoaded', function() {
-            const messageLinks = document.querySelectorAll('.message-reply a.message-link');
-            messageLinks.forEach(link => {
+            const messageContainer = document.getElementById('messageContainer');
+            const replyNavigator = document.getElementById('replyNavigator');
+            const replyChainContainer = document.getElementById('replyChainContainer');
+            const prevReplyButton = document.getElementById('prevReplyButton');
+            const nextReplyButton = document.getElementById('nextReplyButton');
+            const returnToOriginButton = document.getElementById('returnToOriginButton');
+            const closeReplyNavButton = document.getElementById('closeReplyNavButton');
+            const orderToggle = document.getElementById('orderToggle');
+            
+            let messageReplies = {};
+            let messageData = {};
+            let currentReplyChain = { 
+                messages: [],
+                currentIndex: -1,
+                originMessage: null
+            };
+            
+            let isNewestFirst = true;
+            
+            // Audio/Video MIME type mapping
+            const mimeTypes = {
+                'mp3': 'audio/mpeg',
+                'ogg': 'audio/ogg',
+                'm4a': 'audio/mp4',
+                'oga': 'audio/ogg',
+                'flac': 'audio/flac',
+                'aac': 'audio/aac',
+                'wav': 'audio/wav',
+                'mp4': 'video/mp4',
+                'webm': 'video/webm'
+            };
+            
+            function getFileMimeType(filename) {
+                if (!filename) return null;
+                const ext = filename.split('.').pop().toLowerCase();
+                return mimeTypes[ext] || null;
+            }
+            
+            function analyzeMessages() {
+                const allMessages = document.querySelectorAll('.message, .service-message');
+                
+                allMessages.forEach(msg => {
+                    const msgId = msg.id;
+                    if (!msgId) return;
+                    
+                    let previewText = '';
+                    const msgContent = msg.querySelector('.message-content');
+                    if (msgContent) {
+                        previewText = msgContent.textContent.trim();
+                        if (previewText.length > 30) {
+                            previewText = previewText.substring(0, 30) + '...';
+                        }
+                    } else if (msg.textContent) {
+                        previewText = msg.textContent.trim();
+                        if (previewText.length > 30) {
+                            previewText = previewText.substring(0, 30) + '...';
+                        }
+                    }
+                    
+                    let senderName = 'Unknown';
+                    const senderAttr = msg.getAttribute('data-sender');
+                    if (senderAttr) {
+                        senderName = senderAttr;
+                    } else {
+                        const msgSender = msg.querySelector('.message-sender');
+                        if (msgSender) {
+                            senderName = msgSender.textContent.trim().split('(ID:')[0].trim();
+                        }
+                    }
+                    
+                    let msgTime = '';
+                    const timeAttr = msg.getAttribute('data-time');
+                    if (timeAttr) {
+                        msgTime = timeAttr;
+                    } else {
+                        const timeElem = msg.querySelector('.message-time');
+                        if (timeElem) {
+                            msgTime = timeElem.textContent.trim();
+                        }
+                    }
+                    
+                    messageData[msgId] = {
+                        text: previewText,
+                        sender: senderName,
+                        time: msgTime,
+                        element: msg
+                    };
+                    
+                    const replyToId = msg.getAttribute('data-reply-to');
+                    if (replyToId) {
+                        if (!messageReplies[replyToId]) {
+                            messageReplies[replyToId] = [];
+                        }
+                        messageReplies[replyToId].push(msgId);
+                    }
+                });
+            }
+            
+            analyzeMessages();
+            
+            function buildCompleteReplyChain(msgId) {
+                const chain = [];
+                let currentId = msgId;
+                const visited = new Set();
+                
+                while (currentId) {
+                    if (visited.has(currentId)) break;
+                    visited.add(currentId);
+                    chain.unshift(currentId);
+                    
+                    const msg = document.getElementById(currentId);
+                    if (!msg) break;
+                    
+                    const replyToId = msg.getAttribute('data-reply-to');
+                    if (!replyToId) break;
+                    
+                    currentId = replyToId;
+                }
+                
+                function addReplies(msgId, chain) {
+                    if (!messageReplies[msgId]) return;
+                    
+                    const replies = messageReplies[msgId].sort((a, b) => {
+                        const elemA = document.getElementById(a);
+                        const elemB = document.getElementById(b);
+                        if (!elemA || !elemB) return 0;
+                        return elemA.compareDocumentPosition(elemB) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1;
+                    });
+                    
+                    for (const replyId of replies) {
+                        if (chain.includes(replyId)) continue;
+                        chain.push(replyId);
+                    }
+                }
+                
+                for (const id of [...chain]) {
+                    addReplies(id, chain);
+                }
+                
+                return chain;
+            }
+            
+            function updateReplyNavigator() {
+                if (!currentReplyChain.messages || currentReplyChain.messages.length <= 1) {
+                    replyNavigator.style.display = 'none';
+                    return;
+                }
+                
+                replyNavigator.style.display = 'block';
+                replyChainContainer.innerHTML = '';
+                
+                // Find the first message in the chain (the original message that started the thread)
+                const originalMessageId = currentReplyChain.messages[0]; // First message is usually the original
+                
+                currentReplyChain.messages.forEach((msgId, index) => {
+                    if (!messageData[msgId]) return;
+                    
+                    const entry = document.createElement('div');
+                    entry.className = 'reply-chain-entry';
+                    if (index === currentReplyChain.currentIndex) {
+                        entry.classList.add('active');
+                    }
+                    if (msgId === originalMessageId) {
+                        entry.classList.add('original-message');
+                    }
+                    entry.setAttribute('data-msg-id', msgId);
+                    
+                    const avatar = document.createElement('div');
+                    avatar.className = 'reply-chain-entry-avatar';
+                    avatar.textContent = messageData[msgId].sender.charAt(0).toUpperCase();
+                    
+                    const content = document.createElement('div');
+                    content.className = 'reply-chain-entry-content';
+                    
+                    const sender = document.createElement('span');
+                    sender.className = 'reply-chain-entry-sender';
+                    sender.textContent = messageData[msgId].sender;
+                    
+                    const preview = document.createElement('div');
+                    preview.className = 'in-message-preview';
+                    preview.textContent = messageData[msgId].text;
+                    
+                    content.appendChild(sender);
+                    content.appendChild(document.createTextNode(': '));
+                    content.appendChild(preview);
+                    
+                    entry.appendChild(avatar);
+                    entry.appendChild(content);
+                    
+                    entry.addEventListener('click', function() {
+                        navigateToMessage(msgId);
+                    });
+                    
+                    replyChainContainer.appendChild(entry);
+                });
+                
+                prevReplyButton.disabled = currentReplyChain.currentIndex <= 0;
+                nextReplyButton.disabled = currentReplyChain.currentIndex >= currentReplyChain.messages.length - 1;
+                
+                returnToOriginButton.style.display = currentReplyChain.originMessage ? 'block' : 'none';
+            }
+            
+            function navigateToMessage(msgId) {
+                const targetElement = document.getElementById(msgId);
+                if (!targetElement) return;
+                
+                document.querySelectorAll('.highlighted-message').forEach(msg => {
+                    msg.classList.remove('highlighted-message');
+                });
+                
+                if (currentReplyChain.messages.includes(msgId)) {
+                    currentReplyChain.currentIndex = currentReplyChain.messages.indexOf(msgId);
+                    updateReplyNavigator();
+                }
+                
+                targetElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                targetElement.classList.add('highlighted-message');
+            }
+            
+            function startReplyChainNavigation(msgId, originMsg) {
+                const chain = buildCompleteReplyChain(msgId);
+                
+                currentReplyChain = {
+                    messages: chain,
+                    currentIndex: chain.indexOf(msgId),
+                    originMessage: originMsg || null
+                };
+                
+                updateReplyNavigator();
+                navigateToMessage(msgId);
+            }
+            
+            const replyLinks = document.querySelectorAll('.reply-link');
+            replyLinks.forEach(link => {
+                const originId = link.getAttribute('data-origin');
+                const targetId = link.getAttribute('data-target');
+                
                 link.addEventListener('click', function(e) {
-                    const targetId = this.getAttribute('href').substring(1);
-                    const originId = this.getAttribute('data-origin');
-                    const backButton = document.getElementById('back-to-' + originId);
-                    if (backButton) {
-                        backButton.style.display = 'inline-block';
-                        backButton.addEventListener('click', function() {
-                            document.getElementById(originId).scrollIntoView({ behavior: 'smooth' });
-                            this.style.display = 'none';
-                        });
+                    e.preventDefault();
+                    startReplyChainNavigation(targetId, originId);
+                });
+            });
+            
+            prevReplyButton.addEventListener('click', function() {
+                if (currentReplyChain.currentIndex > 0) {
+                    navigateToMessage(currentReplyChain.messages[currentReplyChain.currentIndex - 1]);
+                }
+            });
+            
+            nextReplyButton.addEventListener('click', function() {
+                if (currentReplyChain.currentIndex < currentReplyChain.messages.length - 1) {
+                    navigateToMessage(currentReplyChain.messages[currentReplyChain.currentIndex + 1]);
+                }
+            });
+            
+            returnToOriginButton.addEventListener('click', function() {
+                if (currentReplyChain.originMessage) {
+                    navigateToMessage(currentReplyChain.originMessage);
+                }
+            });
+            
+            closeReplyNavButton.addEventListener('click', function() {
+                replyNavigator.style.display = 'none';
+                currentReplyChain = { messages: [], currentIndex: -1, originMessage: null };
+            });
+            
+            function createReplyPreviews() {
+                replyLinks.forEach(link => {
+                    const targetId = link.getAttribute('data-target');
+                    const previewId = 'preview-' + targetId.substring(3);
+                    const previewDiv = document.getElementById(previewId);
+                    
+                    if (previewDiv && targetId) {
+                        const targetMsg = document.getElementById(targetId);
+                        if (targetMsg) {
+                            let previewContent = document.createElement('div');
+                            previewContent.className = 'preview-content';
+                            
+                            // Add sender info with "Original message" label
+                            const header = document.createElement('div');
+                            header.style.display = 'flex';
+                            header.style.justifyContent = 'space-between';
+                            header.style.marginBottom = '5px';
+                            
+                            const sender = targetMsg.getAttribute('data-sender') || 'Unknown';
+                            const senderDiv = document.createElement('div');
+                            senderDiv.className = 'message-sender';
+                            senderDiv.textContent = sender;
+                            
+                            const label = document.createElement('div');
+                            label.style.fontSize = '0.8em';
+                            label.style.color = '#888';
+                            label.style.fontStyle = 'italic';
+                            label.textContent = 'Original message';
+                            
+                            header.appendChild(senderDiv);
+                            header.appendChild(label);
+                            
+                            previewContent.appendChild(header);
+                            
+                            // Add message content
+                            const origContent = targetMsg.querySelector('.message-content');
+                            if (origContent) {
+                                const contentDiv = document.createElement('div');
+                                contentDiv.className = 'message-content';
+                                contentDiv.innerHTML = origContent.innerHTML.split('<div class="message-time">')[0];
+                                
+                                // Remove any nested replies
+                                const nestedReplies = contentDiv.querySelectorAll('.message-reply');
+                                nestedReplies.forEach(el => el.remove());
+                                
+                                previewContent.appendChild(contentDiv);
+                            }
+                            
+                            previewDiv.innerHTML = '';
+                            previewDiv.appendChild(previewContent);
+                            
+                            // Show a snippet of the reply chain if it exists
+                            const chain = buildCompleteReplyChain(targetId);
+                            if (chain.length > 1) {
+                                const chainDiv = document.createElement('div');
+                                chainDiv.className = 'reply-chain';
+                                
+                                const chainTitle = document.createElement('div');
+                                chainTitle.className = 'reply-chain-title';
+                                chainTitle.textContent = 'This message is part of a conversation:';
+                                chainDiv.appendChild(chainTitle);
+                                
+                                // Only show up to 3 other messages in the chain for simplicity
+                                const messagesToShow = chain.filter(id => id !== targetId).slice(0, 3);
+                                
+                                messagesToShow.forEach(id => {
+                                    if (!messageData[id]) return;
+                                    
+                                    const item = document.createElement('div');
+                                    item.className = 'reply-chain-item';
+                                    
+                                    const text = document.createElement('div');
+                                    text.innerHTML = `<strong>${messageData[id].sender}:</strong> ${messageData[id].text}`;
+                                    
+                                    item.appendChild(text);
+                                    item.addEventListener('click', function() {
+                                        startReplyChainNavigation(id);
+                                    });
+                                    
+                                    chainDiv.appendChild(item);
+                                });
+                                
+                                if (chain.length > 4) {
+                                    const moreInfo = document.createElement('div');
+                                    moreInfo.style.fontSize = '0.8em';
+                                    moreInfo.style.marginTop = '5px';
+                                    moreInfo.style.color = '#666';
+                                    moreInfo.textContent = `+ ${chain.length - 4} more messages in this conversation`;
+                                    chainDiv.appendChild(moreInfo);
+                                }
+                                
+                                previewDiv.appendChild(chainDiv);
+                            }
+                        } else {
+                            previewDiv.textContent = 'Message not available';
+                        }
+                    }
+                });
+            }
+            
+            createReplyPreviews();
+            
+            if (window.location.hash) {
+                const targetId = window.location.hash.substring(1);
+                const targetElement = document.getElementById(targetId);
+                
+                if (targetElement) {
+                    if (targetElement.hasAttribute('data-reply-to') || messageReplies[targetId]) {
+                        startReplyChainNavigation(targetId);
+                    } else {
+                        navigateToMessage(targetId);
+                    }
+                }
+            }
+            
+            function toggleMessageOrder() {
+                isNewestFirst = !isNewestFirst;
+                orderToggle.textContent = isNewestFirst ? 'Newest First' : 'Oldest First';
+                
+                const container = document.getElementById('messageContainer');
+                const dateGroups = [];
+                
+                // First collect all date groups
+                let currentDateGroup = null;
+                let currentDateElement = null;
+                
+                Array.from(container.children).forEach(element => {
+                    if (element.classList.contains('date-separator')) {
+                        // If we have a previous group, add it to our collection
+                        if (currentDateGroup) {
+                            dateGroups.push({
+                                date: currentDateElement,
+                                messages: currentDateGroup
+                            });
+                        }
+                        
+                        // Start a new group
+                        currentDateElement = element;
+                        currentDateGroup = [];
+                    } else if (element.classList.contains('message') || element.classList.contains('service-message')) {
+                        // Add message to current group
+                        if (currentDateGroup) {
+                            currentDateGroup.push(element);
+                            
+                            // Also add the clearfix that follows each message
+                            const nextElement = element.nextElementSibling;
+                            if (nextElement && nextElement.classList.contains('clearfix')) {
+                                currentDateGroup.push(nextElement);
+                            }
+                        }
                     }
                 });
                 
-                const replyId = link.getAttribute('href').substring(1);
-                const previewId = 'preview-' + replyId.substring(3);
-                const previewDiv = document.getElementById(previewId);
-                
-                if (previewDiv && replyId) {
-                    const targetMsg = document.getElementById(replyId);
-                    if (targetMsg) {
-                        let previewContent = targetMsg.cloneNode(true);
-                        previewContent.id = '';
-                        previewContent.classList.add('preview-content');
-                        previewDiv.innerHTML = '';
-                        previewDiv.appendChild(previewContent);
-                    } else {
-                        previewDiv.textContent = 'Mensaje no disponible';
-                    }
+                // Add the last group if exists
+                if (currentDateGroup && currentDateGroup.length > 0) {
+                    dateGroups.push({
+                        date: currentDateElement,
+                        messages: currentDateGroup
+                    });
                 }
-            });
+                
+                // Sort date groups
+                dateGroups.sort((a, b) => {
+                    const dateA = new Date(a.date.textContent.trim());
+                    const dateB = new Date(b.date.textContent.trim());
+                    
+                    if (isNewestFirst) {
+                        return dateB - dateA; // Newest first
+                    } else {
+                        return dateA - dateB; // Oldest first
+                    }
+                });
+                
+                // Clear container
+                container.innerHTML = '';
+                
+                // Rebuild the DOM with the sorted groups
+                dateGroups.forEach(group => {
+                    // Add date separator with increased margin for better visibility
+                    const dateSeparator = group.date.cloneNode(true);
+                    dateSeparator.style.marginTop = '20px';
+                    dateSeparator.style.marginBottom = '15px';
+                    container.appendChild(dateSeparator);
+                    
+                    // Add messages in correct order
+                    let messages = [...group.messages];
+                    if (!isNewestFirst) {
+                        // We need to reverse messages but keep clearfix elements paired with their messages
+                        const messagesWithClearfix = [];
+                        for (let i = 0; i < messages.length; i += 2) {
+                            if (i + 1 < messages.length) {
+                                messagesWithClearfix.push([messages[i], messages[i + 1]]);
+                            } else {
+                                messagesWithClearfix.push([messages[i]]);
+                            }
+                        }
+                        messagesWithClearfix.reverse();
+                        messages = messagesWithClearfix.flat();
+                    }
+                    
+                    messages.forEach(msg => {
+                        container.appendChild(msg.cloneNode(true));
+                    });
+                });
+                
+                // Fix all audio and video elements after reorganizing
+                fixMediaElements();
+                
+                // Reattach event listeners and rebuild data
+                analyzeMessages();
+                
+                // Reattach click handlers for reply links
+                const replyLinks = document.querySelectorAll('.reply-link');
+                replyLinks.forEach(link => {
+                    const originId = link.getAttribute('data-origin');
+                    const targetId = link.getAttribute('data-target');
+                    
+                    link.addEventListener('click', function(e) {
+                        e.preventDefault();
+                        startReplyChainNavigation(targetId, originId);
+                    });
+                });
+                
+                createReplyPreviews();
+            }
+            
+            // Function to ensure media elements have correct MIME types
+            function fixMediaElements() {
+                // Fix audio elements
+                document.querySelectorAll('audio').forEach(audio => {
+                    const source = audio.querySelector('source');
+                    if (source && source.src) {
+                        const url = source.src;
+                        const fileExt = url.split('.').pop().toLowerCase();
+                        
+                        if (fileExt === 'mp3') {
+                            source.type = 'audio/mpeg';
+                        } else if (fileExt === 'ogg' || fileExt === 'oga') {
+                            source.type = 'audio/ogg';
+                        } else if (fileExt === 'm4a') {
+                            source.type = 'audio/mp4';
+                        } else if (fileExt === 'flac') {
+                            source.type = 'audio/flac';
+                        } else if (fileExt === 'aac') {
+                            source.type = 'audio/aac';
+                        } else if (fileExt === 'wav') {
+                            source.type = 'audio/wav';
+                        }
+                    }
+                });
+                
+                // Fix video elements
+                document.querySelectorAll('video').forEach(video => {
+                    const source = video.querySelector('source');
+                    if (source && source.src) {
+                        const url = source.src;
+                        const fileExt = url.split('.').pop().toLowerCase();
+                        
+                        if (fileExt === 'mp4') {
+                            source.type = 'video/mp4';
+                        } else if (fileExt === 'webm') {
+                            source.type = 'video/webm';
+                        }
+                    }
+                });
+            }
+            
+            orderToggle.addEventListener('click', toggleMessageOrder);
             
             const dateSelector = document.getElementById('dateSelector');
             dateSelector.addEventListener('change', function() {
@@ -561,7 +1455,6 @@
             });
             
             const searchInput = document.getElementById('searchInput');
-            const messageContainer = document.getElementById('messageContainer');
             const highlightResults = document.getElementById('highlightResults');
             const resultCount = document.getElementById('resultCount');
             const prevResult = document.getElementById('prevResult');
@@ -589,39 +1482,62 @@
                 navigateHighlight(1);
             });
             
+            function escapeRegExp(string) {
+                return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            }
+            
             function performSearch(searchTerm) {
                 clearHighlights();
                 
-                const regex = new RegExp(`(${searchTerm})`, 'gi');
+                // Escape special regex characters in search term
+                const escapedSearchTerm = escapeRegExp(searchTerm);
+                const regex = new RegExp(`(${escapedSearchTerm})`, 'gi');
                 const messages = messageContainer.querySelectorAll('.message-content, .service-message');
                 
                 messages.forEach(content => {
                     let originalHTML, timeHTML;
+                    let textContent;
                     
                     if (content.classList.contains('service-message')) {
                         const timeElement = content.querySelector('.message-time');
                         if (timeElement) {
                             timeHTML = timeElement.outerHTML;
                             originalHTML = content.innerHTML.replace(timeHTML, '');
+                            textContent = content.textContent.replace(timeElement.textContent, '');
                         } else {
                             originalHTML = content.innerHTML;
                             timeHTML = '';
+                            textContent = content.textContent;
                         }
                     } else {
                         if (!content.innerHTML.includes('<div class="message-time">')) return;
-                        originalHTML = content.innerHTML.split('<div class="message-time">')[0];
-                        timeHTML = '<div class="message-time">' + content.innerHTML.split('<div class="message-time">')[1];
+                        const parts = content.innerHTML.split('<div class="message-time">');
+                        originalHTML = parts[0];
+                        timeHTML = '<div class="message-time">' + parts[1];
+                        
+                        // Get text content without the time part
+                        const tempDiv = document.createElement('div');
+                        tempDiv.innerHTML = originalHTML;
+                        textContent = tempDiv.textContent;
                     }
                     
-                    if (originalHTML.toLowerCase().includes(searchTerm)) {
-                        const newHTML = originalHTML.replace(regex, '<span class="highlight" style="background-color: yellow;">$1</span>');
+                    // Search in text content, not HTML
+                    if (textContent.toLowerCase().includes(searchTerm)) {
+                        // Create a safe temporary element to work with the HTML
+                        const tempDiv = document.createElement('div');
+                        tempDiv.innerHTML = originalHTML;
                         
+                        // Process text nodes only
+                        highlightTextNodes(tempDiv, regex);
+                        
+                        // Update the original element
                         if (content.classList.contains('service-message')) {
-                            content.innerHTML = newHTML + timeHTML;
+                            content.innerHTML = tempDiv.innerHTML + timeHTML;
                         } else {
-                            content.innerHTML = newHTML + timeHTML;
+                            content.innerHTML = tempDiv.innerHTML + timeHTML;
                         }
                         
+                        // Collect highlights
                         const highlights = content.querySelectorAll('.highlight');
                         highlights.forEach(h => {
                             currentHighlights.push(h);
@@ -638,13 +1554,81 @@
                 }
             }
             
-            function clearHighlights() {
-                const highlights = document.querySelectorAll('.highlight');
-                highlights.forEach(h => {
-                    const parent = h.parentNode;
-                    parent.replaceChild(document.createTextNode(h.textContent), h);
-                    parent.normalize();
+            function highlightTextNodes(element, regex) {
+                const walker = document.createTreeWalker(
+                    element,
+                    NodeFilter.SHOW_TEXT,
+                    null,
+                    false
+                );
+                
+                const nodesToReplace = [];
+                let currentNode;
+                
+                // First, collect all text nodes that match
+                while (currentNode = walker.nextNode()) {
+                    if (regex.test(currentNode.nodeValue)) {
+                        nodesToReplace.push(currentNode);
+                    }
+                }
+                
+                // Then replace text in each matching node
+                nodesToReplace.forEach(node => {
+                    const parent = node.parentNode;
+                    
+                    // Skip if parent is already a highlight or script/style
+                    if (parent.classList && parent.classList.contains('highlight') ||
+                        parent.tagName === 'SCRIPT' || parent.tagName === 'STYLE') {
+                        return;
+                    }
+                    
+                    // Reset regex lastIndex
+                    regex.lastIndex = 0;
+                    
+                    // Create a document fragment to hold the new content
+                    const fragment = document.createDocumentFragment();
+                    let lastIndex = 0;
+                    let match;
+                    
+                    while (match = regex.exec(node.nodeValue)) {
+                        // Add text before the match
+                        if (match.index > lastIndex) {
+                            fragment.appendChild(document.createTextNode(
+                                node.nodeValue.substring(lastIndex, match.index)
+                            ));
+                        }
+                        
+                        // Create highlighted span for the match
+                        const span = document.createElement('span');
+                        span.className = 'highlight';
+                        span.style.backgroundColor = 'yellow';
+                        span.appendChild(document.createTextNode(match[0]));
+                        fragment.appendChild(span);
+                        
+                        lastIndex = match.index + match[0].length;
+                    }
+                    
+                    // Add remaining text
+                    if (lastIndex < node.nodeValue.length) {
+                        fragment.appendChild(document.createTextNode(
+                            node.nodeValue.substring(lastIndex)
+                        ));
+                    }
+                    
+                    // Replace the original node with our fragment
+                    parent.replaceChild(fragment, node);
                 });
+            }
+            
+            function clearHighlights() {
+                // Instead of manipulating innerHTML directly, we'll safely replace highlight elements
+                document.querySelectorAll('.highlight').forEach(highlight => {
+                    const textNode = document.createTextNode(highlight.textContent);
+                    highlight.parentNode.replaceChild(textNode, highlight);
+                });
+                
+                // Normalize text nodes in the container to merge split text nodes
+                messageContainer.normalize();
                 
                 currentHighlights = [];
                 currentHighlightIndex = -1;
@@ -675,7 +1659,7 @@
             }
             
             function updateResultCount() {
-                resultCount.textContent = `${currentHighlightIndex + 1} de ${currentHighlights.length}`;
+                resultCount.textContent = `${currentHighlightIndex + 1} of ${currentHighlights.length}`;
             }
         });
     </script>
