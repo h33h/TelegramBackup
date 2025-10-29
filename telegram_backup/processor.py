@@ -17,7 +17,7 @@ from telegram_backup.database.media_manager import (
     find_or_create_media_file,
     save_media_file
 )
-from telegram_backup.telegram_api.messages import process_service_message
+from telegram_backup.telegram_api.messages import process_service_message, get_total_message_count
 from telegram_backup.telegram_api.media import download_media_batch
 
 
@@ -63,8 +63,20 @@ async def process_entity(client, entity_id, entity_name, entity, limit=None, dow
     
     extraction_time = datetime.datetime.now(datetime.timezone.utc).isoformat()
     
-    # Create progress tracker
-    progress = DownloadProgress(total_messages=limit or 0)
+    # Get total message count from the entity
+    console.print("[cyan]Getting total message count...[/cyan]")
+    total_count = await get_total_message_count(client, entity)
+    
+    # Determine effective total to display
+    if limit is None:
+        # No limit specified - show actual total from channel
+        effective_total = total_count
+    else:
+        # Limit specified - show the minimum of limit and actual total
+        effective_total = min(limit, total_count) if total_count > 0 else limit
+    
+    # Create progress tracker with effective total
+    progress = DownloadProgress(total_messages=effective_total)
     progress.start(f"Processing {entity_name}")
     
     # Create semaphore for parallel downloads

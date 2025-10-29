@@ -1,6 +1,29 @@
 """Message processing and service message handling."""
 
 
+async def get_total_message_count(client, entity):
+    """Get total message count for an entity.
+    
+    Args:
+        client: TelegramClient instance
+        entity: Entity object (channel, group, chat, or user)
+        
+    Returns:
+        int: Total number of messages, or 0 if unavailable
+    """
+    try:
+        # Get just one message to access the total count
+        result = await client.get_messages(entity, limit=1)
+        
+        # The result has a .total attribute with the total message count
+        if hasattr(result, 'total'):
+            return result.total
+        return 0
+    except Exception as e:
+        print(f"Error getting total message count: {str(e)}")
+        return 0
+
+
 async def get_channel_name_from_message(client, message):
     """Get channel name from a message.
     
