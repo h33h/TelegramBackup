@@ -1,3 +1,8 @@
 telethon
+cryptg
 jinja2
 beautifulsoup4
+python-dotenv
+qrcode[pil]
+rich>=13.0.0
+pymediainfo>=6.0.0

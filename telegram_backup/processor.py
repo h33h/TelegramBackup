@@ -1,0 +1,225 @@
+"""Entity processing - backup and update operations."""
+
+import os
+import sqlite3
+import asyncio
+import datetime
+from telethon import errors
+from telethon.tl.types import ChannelForbidden
+
+from telegram_backup.utils import sanitize_filename, extract_file_identifiers, get_backup_dir
+from telegram_backup.config import MAX_CONCURRENT_DOWNLOADS, DOWNLOAD_BATCH_SIZE, BACKUP_DIR
+from telegram_backup.database.schema import init_database, migrate_schema
+from telegram_backup.database.operations import save_message_to_db, get_last_message_id
+from telegram_backup.database.media_manager import (
+    index_existing_media, 
+    migrate_legacy_media_data,
+    find_or_create_media_file,
+    save_media_file
+)
+from telegram_backup.telegram_api.messages import process_service_message
+from telegram_backup.telegram_api.media import download_media_batch
+
+
+async def process_entity(client, entity_id, entity_name, entity, limit=None, download_media=False, cleanup_orphaned=True):
+    """Process an entity - download all messages and optionally media.
+    
+    Args:
+        client: TelegramClient instance
+        entity_id: Entity ID
+        entity_name: Entity display name
+        entity: Entity object
+        limit: Maximum number of messages to retrieve (None for all)
+        download_media: Whether to download media files
+    """
+    from telegram_backup.progress import DownloadProgress
+    from rich.console import Console
+    
+    console = Console()
+    console.print(f"\n[bold green]Processing:[/bold green] {entity_name} (ID: {entity_id})")
+    
+    if isinstance(entity, ChannelForbidden):
+        console.print(f"[red]The entity {entity_name} (ID: {entity_id}) is not accessible.[/red]")
+        return
+
+    # Get entity-specific backup directory
+    entity_backup_dir = get_backup_dir(entity_id, entity_name)
+    os.makedirs(entity_backup_dir, exist_ok=True)
+    
+    sanitized_name = sanitize_filename(f"{entity_id}_{entity_name}")
+    db_name = os.path.join(entity_backup_dir, "backup.db")
+    conn = sqlite3.connect(db_name)
+    cursor = conn.cursor()
+    
+    # Initialize database
+    init_database(cursor, conn)
+    
+    # Index existing media files before starting backup
+    if download_media:
+        media_dir = os.path.join(entity_backup_dir, "media")
+        console.print("[cyan]Indexing existing media files...[/cyan]")
+        index_existing_media(cursor, entity_id, conn, media_dir)
+        migrate_legacy_media_data(cursor, entity_id, conn)
+    
+    extraction_time = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    
+    # Create progress tracker
+    progress = DownloadProgress(total_messages=limit or 0)
+    progress.start(f"Processing {entity_name}")
+    
+    # Create semaphore for parallel downloads
+    download_semaphore = asyncio.Semaphore(MAX_CONCURRENT_DOWNLOADS)
+    
+    # Batch collection for parallel downloads
+    media_download_batch = []
+    messages_processed = 0
+
+    try:
+        async for message in client.iter_messages(entity, limit=limit):
+            messages_processed += 1
+            progress.update_message_count(messages_processed)
+            
+            message_dict = message.to_dict()
+            id = message_dict["id"]
+            text = message_dict.get("message", None)
+            media_type = None
+            file_id = None
+            file_unique_id = None
+            file_size = None
+            is_service_message = False
+            
+            # Handle service messages
+            service_text, is_service = await process_service_message(message, client)
+            if is_service:
+                text = service_text
+                is_service_message = True
+            
+            # Handle media
+            if message.media:
+                media_type = message_dict["media"]["_"]
+                
+                # Extract file identifiers
+                file_id, access_hash, file_size = extract_file_identifiers(message.media)
+                
+                if download_media:
+                    # Check if media already exists WITHOUT downloading
+                    media_dir = os.path.join(entity_backup_dir, "media")
+                    media_file_id, file_path, needs_download = await find_or_create_media_file(
+                        cursor, file_id, file_size, message.media, media_type, access_hash, media_dir
+                    )
+                    
+                    if not needs_download:
+                        # Media already exists - save message and skip download
+                        progress.file_skipped(file_size, os.path.basename(file_path) if file_path else None)
+                        await save_message_to_db(
+                            cursor, entity_id, message, extraction_time,
+                            media_file_id=media_file_id,
+                            file_id=file_id, file_unique_id=access_hash, file_size=file_size
+                        )
+                        conn.commit()  # Commit immediately
+                        continue
+                    else:
+                        # Need to download - add to batch
+                        progress.add_file_to_download(file_size or 0)
+                        media_download_batch.append((message, id, file_id, access_hash, file_size, media_type, file_path))
+                        
+                        # Process batch if it reaches threshold
+                        if len(media_download_batch) >= DOWNLOAD_BATCH_SIZE:
+                            media_dir = os.path.join(entity_backup_dir, "media")
+                            download_results = await download_media_batch(
+                                client, [(m, mid) for m, mid, *_ in media_download_batch], 
+                                media_dir, download_semaphore, progress
+                            )
+                            
+                            # Save EACH message immediately after download
+                            for msg, msg_id, fid, ahash, fsize, mtype, fpath in media_download_batch:
+                                media_file, media_hash, mime_type = download_results.get(msg_id, (None, None, None))
+                                
+                                # Save media file to media_files table
+                                media_file_id = None
+                                if media_file and os.path.exists(media_file):
+                                    media_file_id = await save_media_file(
+                                        cursor, media_file, media_hash, fsize, fid, ahash, mtype, mime_type
+                                    )
+                                
+                                # Save message
+                                await save_message_to_db(
+                                    cursor, entity_id, msg, extraction_time,
+                                    media_file_id=media_file_id,
+                                    file_id=fid, file_unique_id=ahash, file_size=fsize
+                                )
+                                
+                                # IMMEDIATE commit after each file
+                                conn.commit()
+                            
+                            # Clear batch
+                            media_download_batch = []
+                        
+                        # Skip to next message since we're batching
+                        continue
+            
+            # For messages without media, save immediately
+            await save_message_to_db(
+                cursor, entity_id, message, extraction_time,
+                media_file_id=None,
+                file_id=file_id if 'file_id' in locals() else None,
+                file_unique_id=access_hash if 'access_hash' in locals() else None,
+                file_size=file_size if 'file_size' in locals() else None
+            )
+            conn.commit()
+        
+        # Process any remaining items in batch
+        if media_download_batch:
+            media_dir = os.path.join(entity_backup_dir, "media")
+            download_results = await download_media_batch(
+                client, [(m, mid) for m, mid, *_ in media_download_batch],
+                media_dir, download_semaphore, progress
+            )
+            
+            for msg, msg_id, fid, ahash, fsize, mtype, fpath in media_download_batch:
+                media_file, media_hash, mime_type = download_results.get(msg_id, (None, None, None))
+                
+                # Save media file to media_files table
+                media_file_id = None
+                if media_file and os.path.exists(media_file):
+                    media_file_id = await save_media_file(
+                        cursor, media_file, media_hash, fsize, fid, ahash, mtype, mime_type
+                    )
+                
+                # Save message
+                await save_message_to_db(
+                    cursor, entity_id, msg, extraction_time,
+                    media_file_id=media_file_id,
+                    file_id=fid, file_unique_id=ahash, file_size=fsize
+                )
+                
+                # IMMEDIATE commit after each file
+                conn.commit()
+        
+        # Stop progress and show summary
+        progress.stop()
+        progress.display_summary(entity_name)
+        
+    except errors.FloodWaitError as e:
+        progress.stop()
+        console.print(f'[red]A flood error occurred. Waiting {e.seconds} seconds before continuing.[/red]')
+        await asyncio.sleep(e.seconds)
+    except errors.ChannelPrivateError:
+        progress.stop()
+        console.print(f"[red]Cannot access entity {entity_name} (ID: {entity_id})[/red]")
+    except KeyboardInterrupt:
+        progress.stop()
+        progress.display_summary(entity_name)
+        console.print("\n[yellow]Interrupted by user[/yellow]")
+        raise
+    finally:
+        # Cleanup orphaned files if requested
+        if cleanup_orphaned and download_media:
+            from telegram_backup.database.media_manager import cleanup_orphaned_files, cleanup_unused_media_files
+            media_dir = os.path.join(entity_backup_dir, "media")
+            cleanup_orphaned_files(cursor, conn, media_dir)
+            cleanup_unused_media_files(cursor, conn, media_dir)
+        
+        conn.close()
+
+
