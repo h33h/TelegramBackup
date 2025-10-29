@@ -3,10 +3,37 @@
 import os
 import datetime
 import unicodedata
+from pathlib import Path
 from functools import lru_cache
 from concurrent.futures import ThreadPoolExecutor
 from telegram_backup.utils import get_file_hash
 from telegram_backup.metadata import normalize_filename_for_search
+
+
+def make_relative_path(file_path, base_dir):
+    """Convert absolute path to relative path from base_dir.
+    
+    Args:
+        file_path: Absolute or relative file path
+        base_dir: Base directory (entity backup directory)
+    
+    Returns:
+        Relative path from base_dir (e.g. "media/file.mp4")
+    """
+    if not file_path:
+        return None
+    
+    try:
+        # Convert to Path objects for proper path manipulation
+        file_path_obj = Path(file_path).resolve()
+        base_dir_obj = Path(base_dir).resolve()
+        
+        # Get relative path
+        rel_path = file_path_obj.relative_to(base_dir_obj)
+        return str(rel_path)
+    except (ValueError, TypeError):
+        # If file_path is not under base_dir, return as is
+        return file_path
 
 
 # LRU cache for frequently accessed file lookups
@@ -502,7 +529,7 @@ async def find_or_create_media_file(cursor, file_id, file_size, media, media_typ
     return None, None, True  # Download needed
 
 
-async def save_media_file(cursor, file_path, file_hash, file_size, file_id=None, access_hash=None, media_type=None, mime_type=None):
+async def save_media_file(cursor, file_path, file_hash, file_size, file_id=None, access_hash=None, media_type=None, mime_type=None, entity_backup_dir=None):
     """Save media file info to media_files table with hash-based deduplication.
     
     Simplified post-download deduplication:
@@ -520,6 +547,7 @@ async def save_media_file(cursor, file_path, file_hash, file_size, file_id=None,
         access_hash: Telegram access hash
         media_type: Media type string
         mime_type: MIME type of the file
+        entity_backup_dir: Base directory for relative path conversion (optional)
     
     Returns:
         media_file_id: ID from media_files table
@@ -534,6 +562,12 @@ async def save_media_file(cursor, file_path, file_hash, file_size, file_id=None,
         file_hash = get_file_hash(file_path)
     if not file_size:
         file_size = os.path.getsize(file_path)
+    
+    if not file_hash:
+        return None
+    
+    # Convert to relative path for storage if entity_backup_dir is provided
+    file_path_for_db = make_relative_path(file_path, entity_backup_dir) if entity_backup_dir else file_path
     
     if not file_hash:
         return None
@@ -595,7 +629,7 @@ async def save_media_file(cursor, file_path, file_hash, file_size, file_id=None,
         return duplicate_id
     
     # Check if this exact path already exists in DB
-    cursor.execute("SELECT id FROM media_files WHERE file_path = ?", (file_path,))
+    cursor.execute("SELECT id FROM media_files WHERE file_path = ?", (file_path_for_db,))
     result = cursor.fetchone()
     
     if result:
@@ -637,6 +671,8 @@ async def save_media_file(cursor, file_path, file_hash, file_size, file_id=None,
             try:
                 os.rename(file_path, deterministic_path)
                 file_path = deterministic_path
+                # Update relative path for DB
+                file_path_for_db = make_relative_path(file_path, entity_backup_dir) if entity_backup_dir else file_path
                 # Update metadata with new name
                 metadata = extract_file_metadata(file_path)
             except Exception as e:
@@ -648,7 +684,7 @@ async def save_media_file(cursor, file_path, file_hash, file_size, file_id=None,
         (file_path, file_hash, file_size, file_id, access_hash, media_type, mime_type,
          file_name, file_extension, duration, width, height, indexed_at, last_used_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    """, (file_path, file_hash, file_size, file_id, access_hash, media_type, mime_type,
+    """, (file_path_for_db, file_hash, file_size, file_id, access_hash, media_type, mime_type,
           metadata.get('file_name'), metadata.get('file_extension'),
           metadata.get('duration'), metadata.get('width'), metadata.get('height'),
           now, now))

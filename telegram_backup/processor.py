@@ -139,7 +139,8 @@ async def process_entity(client, entity_id, entity_name, entity, limit=None, dow
                                 media_file_id = None
                                 if media_file and os.path.exists(media_file):
                                     media_file_id = await save_media_file(
-                                        cursor, media_file, media_hash, fsize, fid, ahash, mtype, mime_type
+                                        cursor, media_file, media_hash, fsize, fid, ahash, mtype, mime_type,
+                                        entity_backup_dir=entity_backup_dir
                                     )
                                 
                                 # Save message
@@ -183,7 +184,8 @@ async def process_entity(client, entity_id, entity_name, entity, limit=None, dow
                 media_file_id = None
                 if media_file and os.path.exists(media_file):
                     media_file_id = await save_media_file(
-                        cursor, media_file, media_hash, fsize, fid, ahash, mtype, mime_type
+                        cursor, media_file, media_hash, fsize, fid, ahash, mtype, mime_type,
+                        entity_backup_dir=entity_backup_dir
                     )
                 
                 # Save message

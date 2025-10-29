@@ -2,6 +2,10 @@
 
 TelegramBackup is a comprehensive tool designed for extracting, organizing, and archiving messages from your Telegram chats, channels, and groups. It preserves not only message content but also media files, reactions, replies, forwarded content, and other rich features that make Telegram unique. Whether you need to back up personal conversations, archive large channels, or export group discussions, TelegramBackup offers a complete solution.
 
+## 📱 NEW: Telegram Backup Viewer
+
+View your backups with our native SwiftUI app for macOS and iOS! Check out [TelegramBackupViewer](TelegramBackupViewer/) for a beautiful interface to browse, search, and view your backed-up messages with full media support.
+
 ## 🌟 Key Features
 
 ### Core Functionality

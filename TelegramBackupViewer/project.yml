@@ -1,0 +1,47 @@
+name: TelegramBackupViewer
+options:
+  bundleIdPrefix: com.telegrambackup
+  deploymentTarget:
+    macOS: "14.0"
+    iOS: "17.0"
+
+packages:
+  SQLite:
+    url: https://github.com/stephencelis/SQLite.swift.git
+    from: 0.15.0
+
+targets:
+  TelegramBackupViewer-iOS:
+    type: application
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - Sources
+    dependencies:
+      - package: SQLite
+    info:
+      path: Info.plist
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.telegrambackup.viewer
+        PRODUCT_NAME: Telegram Backup Viewer
+        TARGETED_DEVICE_FAMILY: 1,2
+        INFOPLIST_FILE: Info.plist
+    
+  TelegramBackupViewer-macOS:
+    type: application
+    platform: macOS
+    deploymentTarget: "14.0"
+    sources:
+      - Sources
+    dependencies:
+      - package: SQLite
+    info:
+      path: Info.plist
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.telegrambackup.viewer
+        PRODUCT_NAME: Telegram Backup Viewer
+        INFOPLIST_FILE: Info.plist
+
+
