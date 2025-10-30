@@ -27,13 +27,13 @@ async def discover_entities(client):
         entity = dialog.entity
         if isinstance(entity, User):
             entity_type = "Users"
-            name = entity.first_name
+            name = entity.first_name or f"User {entity.id}"
         elif isinstance(entity, Channel):
             entity_type = "Channels" if entity.broadcast else "Supergroups"
-            name = entity.title
+            name = entity.title or f"Channel {entity.id}"
         elif isinstance(entity, Chat):
             entity_type = "Groups"
-            name = entity.title
+            name = entity.title or f"Group {entity.id}"
         elif isinstance(entity, ChannelForbidden):
             entity_type = "Unknown"
             name = f"ID: {entity.id}"
@@ -72,8 +72,8 @@ async def save_entities_to_csv(entities, phone_number):
         
         for category in category_order:
             if category in entities:
-                # Sort entities within category by name
-                sorted_entities = sorted(entities[category], key=lambda x: x[1].lower())
+                # Sort entities within category by name (handle None names)
+                sorted_entities = sorted(entities[category], key=lambda x: (x[1] or '').lower())
                 for id, name, _ in sorted_entities:
                     csv_writer.writerow([index, category, name, id])
                     index += 1
@@ -100,8 +100,8 @@ def get_flat_entity_list(entities):
     flat_list = []
     for category in category_order:
         if category in entities:
-            # Sort entities within category by name (case-insensitive)
-            sorted_entities = sorted(entities[category], key=lambda x: x[1].lower())
+            # Sort entities within category by name (handle None names, case-insensitive)
+            sorted_entities = sorted(entities[category], key=lambda x: (x[1] or '').lower())
             flat_list.extend(sorted_entities)
     
     return flat_list
