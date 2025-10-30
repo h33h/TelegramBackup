@@ -6,3 +6,4 @@ python-dotenv
 qrcode[pil]
 rich>=13.0.0
 pymediainfo>=6.0.0
+xxhash>=3.0.0

@@ -155,7 +155,13 @@ async def run_cli():
             
             download_media = Confirm.ask("[bold]Do you want to download media files?[/bold]", default=True)
             
-            await process_entity(client, *flat_entities[selected_index], limit=limit, download_media=download_media)
+            try:
+                await process_entity(client, *flat_entities[selected_index], limit=limit, download_media=download_media)
+            except KeyboardInterrupt:
+                console.print("\n[yellow]⚠ Operation cancelled by user[/yellow]")
+                console.print("[green]✓ Progress has been saved[/green]")
+                # Continue to menu instead of exiting
+                continue
             
         elif choice == 't':
             limit_str = Prompt.ask(
@@ -166,9 +172,15 @@ async def run_cli():
             
             download_media = Confirm.ask("[bold]Do you want to download media files?[/bold]", default=True)
             
-            for category in entities.values():
-                for entity in category:
-                    await process_entity(client, *entity, limit=limit, download_media=download_media)
+            try:
+                for category in entities.values():
+                    for entity in category:
+                        await process_entity(client, *entity, limit=limit, download_media=download_media)
+            except KeyboardInterrupt:
+                console.print("\n[yellow]⚠ Operation cancelled by user[/yellow]")
+                console.print("[green]✓ Progress has been saved[/green]")
+                # Continue to menu instead of exiting
+                continue
                     
         elif choice == 'x':
             session_closed = await close_current_session(client)

@@ -4,10 +4,22 @@ import re
 import hashlib
 import os
 import asyncio
+import logging
 from concurrent.futures import ThreadPoolExecutor
+
+# Logger for error tracking
+logger = logging.getLogger('telegram_backup.utils')
 
 # MEDIUM PRIORITY FIX: Thread pool for async file hashing
 _hash_thread_pool = ThreadPoolExecutor(max_workers=3, thread_name_prefix="hash_worker")
+
+# Try to import xxhash for faster hashing (fallback to hashlib if not available)
+try:
+    import xxhash
+    HAS_XXHASH = True
+except ImportError:
+    HAS_XXHASH = False
+    logger.info("xxhash not available, using SHA-256 (slower). Install xxhash for better performance: pip install xxhash")
 
 
 def get_url_from_forwarded(forwarded):
@@ -43,14 +55,17 @@ def get_backup_dir(entity_id, entity_name):
     return os.path.join(BACKUP_DIR, sanitized_name)
 
 
-def get_file_hash(file_path, algorithm='sha256'):
+def get_file_hash(file_path, algorithm='auto', chunk_size=65536):
     """Calculate hash of a file (synchronous version).
     
-    LOW PRIORITY FIX: Changed default from MD5 to SHA-256 for better security.
+    Optimized version using xxhash when available for deduplication,
+    falling back to SHA-256 for security.
     
     Args:
         file_path: Path to the file
-        algorithm: Hash algorithm ('md5' or 'sha256', default: 'sha256')
+        algorithm: Hash algorithm ('auto', 'xxhash', 'md5', 'sha256')
+                  'auto' uses xxhash if available, otherwise sha256
+        chunk_size: Size of chunks to read (default 64KB for better performance)
     
     Returns:
         str: Hash hex digest or None if file doesn't exist
@@ -58,28 +73,49 @@ def get_file_hash(file_path, algorithm='sha256'):
     if not os.path.exists(file_path):
         return None
     
-    if algorithm == 'md5':
-        hasher = hashlib.md5()
-    elif algorithm == 'sha256':
-        hasher = hashlib.sha256()
-    else:
-        raise ValueError(f"Unsupported hash algorithm: {algorithm}")
-    
-    with open(file_path, "rb") as f:
-        for chunk in iter(lambda: f.read(4096), b""):
-            hasher.update(chunk)
-    return hasher.hexdigest()
+    try:
+        # Auto-select best algorithm
+        if algorithm == 'auto':
+            if HAS_XXHASH:
+                algorithm = 'xxhash'
+            else:
+                algorithm = 'sha256'
+        
+        # Create hasher based on algorithm
+        if algorithm == 'xxhash':
+            if not HAS_XXHASH:
+                logger.warning("xxhash requested but not available, falling back to sha256")
+                algorithm = 'sha256'
+            else:
+                hasher = xxhash.xxh128()
+        elif algorithm == 'md5':
+            hasher = hashlib.md5()
+        elif algorithm == 'sha256':
+            hasher = hashlib.sha256()
+        else:
+            raise ValueError(f"Unsupported hash algorithm: {algorithm}")
+        
+        # Stream file and calculate hash
+        with open(file_path, "rb") as f:
+            for chunk in iter(lambda: f.read(chunk_size), b""):
+                hasher.update(chunk)
+        
+        return hasher.hexdigest()
+    except Exception as e:
+        logger.error(f"Error calculating hash for {file_path}: {e}")
+        return None
 
 
-async def get_file_hash_async(file_path, algorithm='sha256'):
+async def get_file_hash_async(file_path, algorithm='auto'):
     """Calculate hash of a file asynchronously.
     
     MEDIUM PRIORITY FIX: Non-blocking file hashing using thread pool.
-    LOW PRIORITY FIX: SHA-256 by default instead of MD5.
+    Uses xxhash when available for faster deduplication.
     
     Args:
         file_path: Path to the file
-        algorithm: Hash algorithm ('md5' or 'sha256', default: 'sha256')
+        algorithm: Hash algorithm ('auto', 'xxhash', 'md5', 'sha256')
+                  'auto' uses xxhash if available, otherwise sha256
         
     Returns:
         str: Hash hex digest or None if file doesn't exist
