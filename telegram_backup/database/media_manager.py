@@ -3,11 +3,20 @@
 import os
 import datetime
 import unicodedata
+import threading
+import logging
 from pathlib import Path
 from functools import lru_cache
 from concurrent.futures import ThreadPoolExecutor
 from telegram_backup.utils import get_file_hash
 from telegram_backup.metadata import normalize_filename_for_search
+
+# HIGH PRIORITY FIX: Thread lock for deduplication operations
+# Prevents race conditions when multiple threads try to deduplicate the same file
+_deduplication_lock = threading.Lock()
+
+# MEDIUM PRIORITY FIX: Logger for error tracking
+logger = logging.getLogger('telegram_backup.media_manager')
 
 
 def make_relative_path(file_path, base_dir):
@@ -436,13 +445,14 @@ def migrate_legacy_media_data(cursor, entity_id, conn):
     return migrated_count
 
 
-async def find_or_create_media_file(cursor, file_id, file_size, media, media_type=None, access_hash=None, media_dir=''):
+async def find_or_create_media_file(cursor, conn, file_id, file_size, media, media_type=None, access_hash=None, media_dir=''):
     """Find existing media file by metadata or prepare path for new download.
     
     NEW: Uses metadata comparison to find existing files WITHOUT downloading.
     
     Args:
         cursor: Database cursor
+        conn: Database connection (for commit after updates)
         file_id: Telegram file ID (unique identifier)
         file_size: File size in bytes
         media: Telegram media object (for metadata extraction)
@@ -470,7 +480,7 @@ async def find_or_create_media_file(cursor, file_id, file_size, media, media_typ
     existing_media_id, existing_path = find_existing_media_by_params(cursor, metadata)
     
     if existing_media_id and existing_path:
-        # Found existing media - update file_id if missing and return
+        # Found existing media - update file_id if missing
         cursor.execute("""
             UPDATE media_files 
             SET file_id = COALESCE(file_id, ?),
@@ -478,6 +488,53 @@ async def find_or_create_media_file(cursor, file_id, file_size, media, media_typ
                 last_used_at = ?
             WHERE id = ?
         """, (file_id, access_hash, now, existing_media_id))
+        
+        # Commit immediately after metadata update
+        conn.commit()
+        
+        # Try to rename to deterministic filename if needed
+        if file_id and media:
+            from telegram_backup.telegram_api.media import get_file_extension
+            
+            # Get absolute path
+            if not os.path.isabs(existing_path):
+                from telegram_backup.utils import get_backup_dir
+                # Extract entity info from path
+                existing_path_abs = os.path.join(media_dir, os.path.basename(existing_path)) if media_dir else existing_path
+            else:
+                existing_path_abs = existing_path
+            
+            # Check if file exists and doesn't already use fileID naming
+            if os.path.exists(existing_path_abs):
+                current_filename = os.path.basename(existing_path_abs)
+                
+                # Only rename if not already using fileID format
+                if not current_filename.startswith(file_id):
+                    _, extension = os.path.splitext(existing_path_abs)
+                    
+                    if extension:
+                        new_filename = f"{file_id}{extension}"
+                        new_path_abs = os.path.join(os.path.dirname(existing_path_abs), new_filename)
+                        
+                        # Check target doesn't exist
+                        if not os.path.exists(new_path_abs) or new_path_abs == existing_path_abs:
+                            try:
+                                os.rename(existing_path_abs, new_path_abs)
+                                
+                                # Update database with new path
+                                cursor.execute("""
+                                    UPDATE media_files 
+                                    SET file_path = ?
+                                    WHERE id = ?
+                                """, (new_path_abs, existing_media_id))
+                                
+                                # CRITICAL: Commit immediately after file rename
+                                # to keep filesystem and database in sync
+                                conn.commit()
+                                
+                                existing_path = new_path_abs
+                            except Exception:
+                                pass  # If rename fails, continue with old path
         
         return existing_media_id, existing_path, False  # Don't download
     
@@ -493,6 +550,47 @@ async def find_or_create_media_file(cursor, file_id, file_size, media, media_typ
         
         if result:
             media_file_id, existing_path, existing_hash = result
+            
+            # Try to rename to deterministic filename if needed
+            if file_id and media and existing_path:
+                # Get absolute path
+                if not os.path.isabs(existing_path):
+                    existing_path_abs = os.path.join(media_dir, os.path.basename(existing_path)) if media_dir else existing_path
+                else:
+                    existing_path_abs = existing_path
+                
+                # Check if file exists and doesn't already use fileID naming
+                if os.path.exists(existing_path_abs):
+                    current_filename = os.path.basename(existing_path_abs)
+                    
+                    # Only rename if not already using fileID format
+                    if not current_filename.startswith(file_id):
+                        _, extension = os.path.splitext(existing_path_abs)
+                        
+                        if extension:
+                            new_filename = f"{file_id}{extension}"
+                            new_path_abs = os.path.join(os.path.dirname(existing_path_abs), new_filename)
+                            
+                            # Check target doesn't exist
+                            if not os.path.exists(new_path_abs) or new_path_abs == existing_path_abs:
+                                try:
+                                    os.rename(existing_path_abs, new_path_abs)
+                                    
+                                    # Update database with new path
+                                    cursor.execute("""
+                                        UPDATE media_files 
+                                        SET file_path = ?
+                                        WHERE id = ?
+                                    """, (new_path_abs, media_file_id))
+                                    
+                                    # CRITICAL: Commit immediately after file rename
+                                    # to keep filesystem and database in sync
+                                    conn.commit()
+                                    
+                                    existing_path = new_path_abs
+                                except Exception:
+                                    pass  # If rename fails, continue with old path
+            
             return media_file_id, existing_path, False  # Don't download
     
     # Step 4: Check filesystem for deterministic filename
@@ -538,6 +636,8 @@ async def save_media_file(cursor, file_path, file_hash, file_size, file_id=None,
     - Rename to deterministic name for future Level 2 detection
     - Extract and save full metadata
     
+    HIGH PRIORITY FIX: Thread-safe deduplication with lock
+    
     Args:
         cursor: Database cursor
         file_path: Path to the downloaded file
@@ -569,127 +669,154 @@ async def save_media_file(cursor, file_path, file_hash, file_size, file_id=None,
     # Convert to relative path for storage if entity_backup_dir is provided
     file_path_for_db = make_relative_path(file_path, entity_backup_dir) if entity_backup_dir else file_path
     
-    if not file_hash:
-        return None
-    
     # Extract metadata from downloaded file
     metadata = extract_file_metadata(file_path)
     
     now = datetime.datetime.now(datetime.timezone.utc).isoformat()
     
-    # Check for hash+size duplicates
-    cursor.execute("""
-        SELECT id, file_path FROM media_files 
-        WHERE file_hash = ? AND file_size = ?
-        LIMIT 1
-    """, (file_hash, file_size))
-    duplicate = cursor.fetchone()
-    
-    if duplicate:
-        duplicate_id, duplicate_path = duplicate
+    # HIGH PRIORITY FIX: Use lock for deduplication check and file operations
+    with _deduplication_lock:
+        # Check for hash+size duplicates
+        cursor.execute("""
+            SELECT id, file_path FROM media_files 
+            WHERE file_hash = ? AND file_size = ?
+            LIMIT 1
+        """, (file_hash, file_size))
+        duplicate = cursor.fetchone()
         
-        # Delete the newly downloaded file (it's a duplicate)
-        if file_path != duplicate_path:
-            try:
-                os.remove(file_path)
-            except Exception as e:
-                pass
+        if duplicate:
+            duplicate_id, duplicate_path = duplicate
+            
+            # CRITICAL FIX: Check if duplicate file still exists before deleting new file
+            if not os.path.exists(duplicate_path):
+                # Duplicate file was deleted - keep the new file and update DB reference
+                cursor.execute("""
+                    UPDATE media_files 
+                    SET file_path = ?,
+                        file_id = COALESCE(?, file_id),
+                        access_hash = COALESCE(?, access_hash),
+                        last_used_at = ?
+                    WHERE id = ?
+                """, (file_path_for_db, file_id, access_hash, now, duplicate_id))
+                return duplicate_id
+            
+            # Delete the newly downloaded file (it's a duplicate and original exists)
+            if file_path != duplicate_path:
+                try:
+                    os.remove(file_path)
+                except Exception as e:
+                    pass
+            
+            # Update existing record with file_id if missing
+            if file_id:
+                cursor.execute("""
+                    UPDATE media_files 
+                    SET file_id = COALESCE(file_id, ?),
+                        access_hash = COALESCE(access_hash, ?),
+                        last_used_at = ?
+                    WHERE id = ?
+                """, (file_id, access_hash, now, duplicate_id))
+                
+                # Try to rename duplicate to deterministic name for future reuse
+                if media_type:
+                    from telegram_backup.telegram_api.media import get_file_extension
+                    extension = get_file_extension(None, media_type)
+                    if not extension or extension == '.bin':
+                        _, extension = os.path.splitext(duplicate_path)
+                    
+                    media_dir = os.path.dirname(duplicate_path)
+                    deterministic_name = f"{file_id}{extension}"
+                    deterministic_path = os.path.join(media_dir, deterministic_name)
+                    
+                    if duplicate_path != deterministic_path and not os.path.exists(deterministic_path):
+                        try:
+                            os.rename(duplicate_path, deterministic_path)
+                            cursor.execute("UPDATE media_files SET file_path = ? WHERE id = ?", 
+                                         (deterministic_path, duplicate_id))
+                        except Exception as e:
+                            # MEDIUM PRIORITY FIX: Log rename errors
+                            logger.warning(f"Failed to rename file {duplicate_path} to {deterministic_path}: {e}")
+            else:
+                cursor.execute("UPDATE media_files SET last_used_at = ? WHERE id = ?", (now, duplicate_id))
+            
+            return duplicate_id
         
-        # Update existing record with file_id if missing
-        if file_id:
+        # Check if this exact path already exists in DB
+        cursor.execute("SELECT id FROM media_files WHERE file_path = ?", (file_path_for_db,))
+        result = cursor.fetchone()
+        
+        if result:
+            # Update existing entry with metadata
+            media_file_id = result[0]
             cursor.execute("""
                 UPDATE media_files 
-                SET file_id = COALESCE(file_id, ?),
-                    access_hash = COALESCE(access_hash, ?),
+                SET file_hash = ?, file_size = ?, 
+                    file_id = COALESCE(?, file_id),
+                    access_hash = COALESCE(?, access_hash),
+                    media_type = COALESCE(?, media_type),
+                    mime_type = COALESCE(?, mime_type),
+                    file_name = COALESCE(?, file_name),
+                    file_extension = COALESCE(?, file_extension),
+                    duration = COALESCE(?, duration),
+                    width = COALESCE(?, width),
+                    height = COALESCE(?, height),
                     last_used_at = ?
                 WHERE id = ?
-            """, (file_id, access_hash, now, duplicate_id))
-            
-            # Try to rename duplicate to deterministic name for future reuse
-            if media_type:
-                from telegram_backup.telegram_api.media import get_file_extension
-                extension = get_file_extension(None, media_type)
-                if not extension or extension == '.bin':
-                    _, extension = os.path.splitext(duplicate_path)
-                
-                media_dir = os.path.dirname(duplicate_path)
-                deterministic_name = f"{file_id}{extension}"
-                deterministic_path = os.path.join(media_dir, deterministic_name)
-                
-                if duplicate_path != deterministic_path and not os.path.exists(deterministic_path):
-                    try:
-                        os.rename(duplicate_path, deterministic_path)
-                        cursor.execute("UPDATE media_files SET file_path = ? WHERE id = ?", 
-                                     (deterministic_path, duplicate_id))
-                    except Exception as e:
-                        pass  # Rename is optional optimization
-        else:
-            cursor.execute("UPDATE media_files SET last_used_at = ? WHERE id = ?", (now, duplicate_id))
+            """, (file_hash, file_size, file_id, access_hash, media_type, mime_type,
+                  metadata.get('file_name'), metadata.get('file_extension'),
+                  metadata.get('duration'), metadata.get('width'), metadata.get('height'),
+                  now, media_file_id))
+            return media_file_id
         
-        return duplicate_id
-    
-    # Check if this exact path already exists in DB
-    cursor.execute("SELECT id FROM media_files WHERE file_path = ?", (file_path_for_db,))
-    result = cursor.fetchone()
-    
-    if result:
-        # Update existing entry with metadata
-        media_file_id = result[0]
+        # Rename to deterministic name if we have file_id
+        if file_id and media_type:
+            from telegram_backup.telegram_api.media import get_file_extension
+            extension = get_file_extension(None, media_type)
+            
+            if not extension or extension == '.bin':
+                _, extension = os.path.splitext(file_path)
+            
+            media_dir = os.path.dirname(file_path)
+            deterministic_name = f"{file_id}{extension}"
+            deterministic_path = os.path.join(media_dir, deterministic_name)
+            
+            if file_path != deterministic_path and not os.path.exists(deterministic_path):
+                try:
+                    os.rename(file_path, deterministic_path)
+                    file_path = deterministic_path
+                    # Update relative path for DB
+                    file_path_for_db = make_relative_path(file_path, entity_backup_dir) if entity_backup_dir else file_path
+                    # Update metadata with new name
+                    metadata = extract_file_metadata(file_path)
+                except Exception as e:
+                    # MEDIUM PRIORITY FIX: Log rename errors
+                    logger.warning(f"Failed to rename file {file_path} to {deterministic_path}: {e}")
+        
+        # Insert new entry with full metadata
         cursor.execute("""
-            UPDATE media_files 
-            SET file_hash = ?, file_size = ?, 
-                file_id = COALESCE(?, file_id),
-                access_hash = COALESCE(?, access_hash),
-                media_type = COALESCE(?, media_type),
-                mime_type = COALESCE(?, mime_type),
-                file_name = COALESCE(?, file_name),
-                file_extension = COALESCE(?, file_extension),
-                duration = COALESCE(?, duration),
-                width = COALESCE(?, width),
-                height = COALESCE(?, height),
-                last_used_at = ?
-            WHERE id = ?
-        """, (file_hash, file_size, file_id, access_hash, media_type, mime_type,
+            INSERT OR IGNORE INTO media_files 
+            (file_path, file_hash, file_size, file_id, access_hash, media_type, mime_type,
+             file_name, file_extension, duration, width, height, indexed_at, last_used_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (file_path_for_db, file_hash, file_size, file_id, access_hash, media_type, mime_type,
               metadata.get('file_name'), metadata.get('file_extension'),
               metadata.get('duration'), metadata.get('width'), metadata.get('height'),
-              now, media_file_id))
+              now, now))
+        
+        media_file_id = cursor.lastrowid
+        
+        # If INSERT was ignored due to UNIQUE constraint, get the existing record
+        if media_file_id == 0:
+            cursor.execute("""
+                SELECT id FROM media_files 
+                WHERE file_hash = ? AND file_size = ?
+                LIMIT 1
+            """, (file_hash, file_size))
+            result = cursor.fetchone()
+            if result:
+                media_file_id = result[0]
+        
         return media_file_id
-    
-    # Rename to deterministic name if we have file_id
-    if file_id and media_type:
-        from telegram_backup.telegram_api.media import get_file_extension
-        extension = get_file_extension(None, media_type)
-        
-        if not extension or extension == '.bin':
-            _, extension = os.path.splitext(file_path)
-        
-        media_dir = os.path.dirname(file_path)
-        deterministic_name = f"{file_id}{extension}"
-        deterministic_path = os.path.join(media_dir, deterministic_name)
-        
-        if file_path != deterministic_path and not os.path.exists(deterministic_path):
-            try:
-                os.rename(file_path, deterministic_path)
-                file_path = deterministic_path
-                # Update relative path for DB
-                file_path_for_db = make_relative_path(file_path, entity_backup_dir) if entity_backup_dir else file_path
-                # Update metadata with new name
-                metadata = extract_file_metadata(file_path)
-            except Exception as e:
-                pass  # Rename is optional
-    
-    # Insert new entry with full metadata
-    cursor.execute("""
-        INSERT INTO media_files 
-        (file_path, file_hash, file_size, file_id, access_hash, media_type, mime_type,
-         file_name, file_extension, duration, width, height, indexed_at, last_used_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    """, (file_path_for_db, file_hash, file_size, file_id, access_hash, media_type, mime_type,
-          metadata.get('file_name'), metadata.get('file_extension'),
-          metadata.get('duration'), metadata.get('width'), metadata.get('height'),
-          now, now))
-    
-    return cursor.lastrowid
 
 
 def cleanup_orphaned_files(cursor, conn, media_dir):

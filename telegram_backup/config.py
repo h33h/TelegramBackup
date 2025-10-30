@@ -7,8 +7,21 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Telegram API credentials
-API_ID = int(os.getenv('TELEGRAM_API_ID', '25266913'))
-API_HASH = os.getenv('TELEGRAM_API_HASH', 'ecb219964d870430249c46d20b01ea2d')
+# HIGH PRIORITY FIX: Removed hardcoded default values for security
+# Users MUST provide these via .env file
+API_ID_STR = os.getenv('TELEGRAM_API_ID')
+API_HASH = os.getenv('TELEGRAM_API_HASH')
+
+if not API_ID_STR or not API_HASH:
+    raise ValueError(
+        "TELEGRAM_API_ID and TELEGRAM_API_HASH must be set in .env file.\n"
+        "Get your credentials from https://my.telegram.org/apps"
+    )
+
+try:
+    API_ID = int(API_ID_STR)
+except ValueError:
+    raise ValueError("TELEGRAM_API_ID must be a valid integer")
 
 # Download settings
 MAX_CONCURRENT_DOWNLOADS = 5

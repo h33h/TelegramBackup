@@ -68,6 +68,10 @@ def create_media_indexes(cursor):
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_media_name ON media_files(file_name)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_media_size_duration ON media_files(file_size, duration)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_media_resolution ON media_files(width, height)")
+    
+    # CRITICAL FIX: Add UNIQUE constraint on (file_hash, file_size) for DB-level deduplication
+    # This prevents race conditions when multiple threads try to insert the same file
+    cursor.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_media_hash_size_unique ON media_files(file_hash, file_size)")
 
 
 def create_buttons_table(cursor):
@@ -128,6 +132,9 @@ def init_database(cursor, conn):
     create_reactions_table(cursor)
     create_backup_metadata_table(cursor)
     
+    # LOW PRIORITY FIX: Initialize schema version
+    init_schema_version(cursor, conn)
+    
     # Run migrations first to add any missing columns
     migrate_schema(cursor, conn)
     
@@ -137,9 +144,36 @@ def init_database(cursor, conn):
     conn.commit()
 
 
+def init_schema_version(cursor, conn):
+    """Initialize schema version metadata.
+    
+    LOW PRIORITY FIX: Track schema version for future migrations.
+    """
+    from telegram_backup.database.media_manager import get_metadata_value, set_metadata_value
+    
+    current_version = get_metadata_value(cursor, 'schema_version')
+    if current_version is None:
+        # Set initial schema version
+        set_metadata_value(cursor, 'schema_version', '1.0')
+        conn.commit()
+
+
 def check_and_add_column(cursor, table_name, column_name, column_type, default_value=None):
-    """Check if column exists and add it if missing."""
-    cursor.execute(f"SELECT sql FROM sqlite_master WHERE type='table' AND name='{table_name}'")
+    """Check if column exists and add it if missing.
+    
+    MEDIUM PRIORITY FIX: Better validation of input parameters.
+    """
+    # Validate table and column names to prevent SQL injection
+    # (even though these are internal calls, it's good practice)
+    valid_name_pattern = r'^[a-zA-Z_][a-zA-Z0-9_]*$'
+    import re
+    
+    if not re.match(valid_name_pattern, table_name):
+        raise ValueError(f"Invalid table name: {table_name}")
+    if not re.match(valid_name_pattern, column_name):
+        raise ValueError(f"Invalid column name: {column_name}")
+    
+    cursor.execute(f"SELECT sql FROM sqlite_master WHERE type='table' AND name=?", (table_name,))
     result = cursor.fetchone()
     
     if not result:
@@ -148,7 +182,14 @@ def check_and_add_column(cursor, table_name, column_name, column_type, default_v
     table_schema = result[0]
     
     if column_name not in table_schema:
+        # Validate column_type is safe (basic check)
+        allowed_types = ['TEXT', 'INTEGER', 'REAL', 'BLOB', 'BOOLEAN']
+        column_type_upper = column_type.upper()
+        if not any(t in column_type_upper for t in allowed_types):
+            raise ValueError(f"Invalid column type: {column_type}")
+        
         default_clause = f"DEFAULT {default_value}" if default_value is not None else ""
+        # Safe to use f-string here after validation
         cursor.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_type} {default_clause}")
         return True
     
@@ -156,12 +197,22 @@ def check_and_add_column(cursor, table_name, column_name, column_type, default_v
 
 
 def migrate_schema(cursor, conn):
-    """Update database schema to latest version."""
+    """Update database schema to latest version.
+    
+    LOW PRIORITY FIX: Track migrations with schema version.
+    """
+    from telegram_backup.database.media_manager import get_metadata_value, set_metadata_value
+    
     cursor.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='messages'")
     table_schema_result = cursor.fetchone()
     
     if not table_schema_result:
         return  # Table doesn't exist yet
+    
+    # Get current schema version
+    current_version = get_metadata_value(cursor, 'schema_version')
+    if current_version is None:
+        current_version = '0.0'  # Legacy database without version tracking
     
     table_schema = table_schema_result[0]
     migrations_performed = []
@@ -236,5 +287,7 @@ def migrate_schema(cursor, conn):
     
     if migrations_performed:
         print(f"Database schema updated: {', '.join(migrations_performed)}")
+        # LOW PRIORITY FIX: Update schema version after migrations
+        set_metadata_value(cursor, 'schema_version', '1.1')
         conn.commit()
 

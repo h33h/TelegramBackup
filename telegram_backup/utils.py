@@ -3,6 +3,11 @@
 import re
 import hashlib
 import os
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
+
+# MEDIUM PRIORITY FIX: Thread pool for async file hashing
+_hash_thread_pool = ThreadPoolExecutor(max_workers=3, thread_name_prefix="hash_worker")
 
 
 def get_url_from_forwarded(forwarded):
@@ -38,16 +43,52 @@ def get_backup_dir(entity_id, entity_name):
     return os.path.join(BACKUP_DIR, sanitized_name)
 
 
-def get_file_hash(file_path):
-    """Calculate MD5 hash of a file."""
+def get_file_hash(file_path, algorithm='sha256'):
+    """Calculate hash of a file (synchronous version).
+    
+    LOW PRIORITY FIX: Changed default from MD5 to SHA-256 for better security.
+    
+    Args:
+        file_path: Path to the file
+        algorithm: Hash algorithm ('md5' or 'sha256', default: 'sha256')
+    
+    Returns:
+        str: Hash hex digest or None if file doesn't exist
+    """
     if not os.path.exists(file_path):
         return None
     
-    hash_md5 = hashlib.md5()
+    if algorithm == 'md5':
+        hasher = hashlib.md5()
+    elif algorithm == 'sha256':
+        hasher = hashlib.sha256()
+    else:
+        raise ValueError(f"Unsupported hash algorithm: {algorithm}")
+    
     with open(file_path, "rb") as f:
         for chunk in iter(lambda: f.read(4096), b""):
-            hash_md5.update(chunk)
-    return hash_md5.hexdigest()
+            hasher.update(chunk)
+    return hasher.hexdigest()
+
+
+async def get_file_hash_async(file_path, algorithm='sha256'):
+    """Calculate hash of a file asynchronously.
+    
+    MEDIUM PRIORITY FIX: Non-blocking file hashing using thread pool.
+    LOW PRIORITY FIX: SHA-256 by default instead of MD5.
+    
+    Args:
+        file_path: Path to the file
+        algorithm: Hash algorithm ('md5' or 'sha256', default: 'sha256')
+        
+    Returns:
+        str: Hash hex digest or None if file doesn't exist
+    """
+    if not os.path.exists(file_path):
+        return None
+    
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(_hash_thread_pool, get_file_hash, file_path, algorithm)
 
 
 def extract_user_id(from_id_str):

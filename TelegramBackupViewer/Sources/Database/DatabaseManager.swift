@@ -142,33 +142,39 @@ class DatabaseManager {
     }
     
     private func parseMessage(from row: Row) throws -> Message {
-        let dateString = try row.get(date)
-        let messageDate = ISO8601DateFormatter().date(from: dateString) ?? Date()
+        // MEDIUM PRIORITY FIX: Defensive parsing with fallback values
+        let dateString = (try? row.get(date)) ?? ""
+        let messageDate: Date
+        if let parsedDate = ISO8601DateFormatter().date(from: dateString) {
+            messageDate = parsedDate
+        } else {
+            messageDate = Date() // Fallback to current date if parsing fails
+        }
         
         return Message(
-            id: try row.get(id),
-            entityId: try row.get(entityId),
+            id: (try? row.get(id)) ?? 0,
+            entityId: (try? row.get(entityId)) ?? 0,
             date: messageDate,
-            text: try row.get(text),
-            mediaType: try row.get(mediaType),
-            mediaFile: try row.get(mediaFile),
-            mediaHash: try row.get(mediaHash),
-            forwarded: try row.get(forwarded),
-            fromId: try row.get(fromId),
-            views: try row.get(views),
-            senderName: try row.get(senderName),
-            replyToMsgId: try row.get(replyToMsgId),
-            reactionsJSON: try row.get(reactionsJSON),
-            webPreview: try row.get(webPreview),
-            extractionTime: try row.get(extractionTime),
-            isServiceMessage: try row.get(isServiceMessage),
-            isVoiceMessage: try row.get(isVoiceMessage),
-            isPinned: try row.get(isPinned),
-            userId: try row.get(userId),
-            fileId: try row.get(fileId),
-            fileUniqueId: try row.get(fileUniqueId),
-            fileSize: try row.get(fileSize),
-            mediaFileId: try row.get(mediaFileId)
+            text: try? row.get(text),
+            mediaType: try? row.get(mediaType),
+            mediaFile: try? row.get(mediaFile),
+            mediaHash: try? row.get(mediaHash),
+            forwarded: try? row.get(forwarded),
+            fromId: try? row.get(fromId),
+            views: try? row.get(views),
+            senderName: try? row.get(senderName),
+            replyToMsgId: try? row.get(replyToMsgId),
+            reactionsJSON: try? row.get(reactionsJSON),
+            webPreview: try? row.get(webPreview),
+            extractionTime: try? row.get(extractionTime),
+            isServiceMessage: (try? row.get(isServiceMessage)) ?? false,
+            isVoiceMessage: (try? row.get(isVoiceMessage)) ?? false,
+            isPinned: (try? row.get(isPinned)) ?? false,
+            userId: try? row.get(userId),
+            fileId: try? row.get(fileId),
+            fileUniqueId: try? row.get(fileUniqueId),
+            fileSize: try? row.get(fileSize),
+            mediaFileId: try? row.get(mediaFileId)
         )
     }
     
@@ -207,5 +213,6 @@ class DatabaseManager {
         connection = nil
     }
 }
+
 
 
