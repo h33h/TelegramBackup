@@ -4,7 +4,8 @@ import asyncio
 import os
 import mimetypes
 from functools import lru_cache
-from telegram_backup.utils import get_file_hash
+from telegram_backup.utils import get_file_hash, get_file_hash_async  # MEDIUM PRIORITY FIX
+from telegram_backup.file_validator import validate_file_after_download  # HIGH PRIORITY FIX
 
 
 def get_mime_type(media):
@@ -177,7 +178,22 @@ async def download_media_batch(client, messages_batch, media_dir, semaphore, pro
                 )
                 
                 if media_file:
-                    media_hash = get_file_hash(media_file)
+                    # HIGH PRIORITY FIX: Validate downloaded file
+                    if not validate_file_after_download(media_file, file_size):
+                        # File validation failed - try to delete corrupted file
+                        try:
+                            if os.path.exists(media_file):
+                                os.remove(media_file)
+                        except:
+                            pass
+                        
+                        if progress:
+                            progress.complete_file_download(msg_id)
+                        results[msg_id] = (None, None, None)
+                        return
+                    
+                    # MEDIUM PRIORITY FIX: Use async hashing to not block event loop
+                    media_hash = await get_file_hash_async(media_file)
                     mime_type = get_mime_type(message.media) if message.media else None
                     actual_size = os.path.getsize(media_file) if os.path.exists(media_file) else 0
                     

@@ -10,8 +10,15 @@ import UIKit
 class MediaManager: ObservableObject {
     static let shared = MediaManager()
     
-    private var imageCache: [String: Image] = [:]
+    // HIGH PRIORITY FIX: Use NSCache instead of unlimited Dictionary for memory safety
+    private let imageCache = NSCache<NSString, ImageCacheItem>()
     private let cacheQueue = DispatchQueue(label: "com.telegrambackup.mediacache")
+    
+    init() {
+        // Configure NSCache with reasonable limits
+        imageCache.countLimit = 100 // Max 100 images
+        imageCache.totalCostLimit = 200 * 1024 * 1024 // Max 200MB
+    }
     
     func getMediaURL(for message: Message, in entity: BackupEntity) -> URL? {
         guard let mediaFile = message.mediaFile else {
@@ -21,14 +28,33 @@ class MediaManager: ObservableObject {
         
         var mediaURL: URL
         
-        // Проверяем, является ли mediaFile абсолютным путем
-        if mediaFile.hasPrefix("/") || mediaFile.hasPrefix("file://") {
+        // CRITICAL FIX: Improved path detection for absolute vs relative paths
+        // Handle various path formats:
+        // - /absolute/path/file.mp4
+        // - file:///absolute/path/file.mp4
+        // - C:\Windows\path\file.mp4 (Windows)
+        // - ./relative/path/file.mp4
+        // - relative/path/file.mp4
+        
+        let trimmedPath = mediaFile.trimmingCharacters(in: .whitespaces)
+        
+        // Check if it's an absolute path
+        let isAbsolute = trimmedPath.hasPrefix("/") || 
+                        trimmedPath.hasPrefix("file://") ||
+                        (trimmedPath.count > 2 && trimmedPath[trimmedPath.index(trimmedPath.startIndex, offsetBy: 1)] == ":" && trimmedPath[trimmedPath.index(trimmedPath.startIndex, offsetBy: 2)] == "\\") // Windows C:\
+        
+        if isAbsolute {
             // Это абсолютный путь
-            mediaURL = URL(fileURLWithPath: mediaFile)
+            if trimmedPath.hasPrefix("file://") {
+                mediaURL = URL(string: trimmedPath) ?? URL(fileURLWithPath: trimmedPath)
+            } else {
+                mediaURL = URL(fileURLWithPath: trimmedPath)
+            }
         } else {
-            // Это относительный путь от директории бэкапа (entity.directoryPath)
-            // Например: "media/file.mp4" или "media/2208833410/file.mp4"
-            mediaURL = entity.directoryPath.appendingPathComponent(mediaFile)
+            // Это относительный путь от директории бэкапа
+            // Убираем префикс ./ если он есть
+            let cleanPath = trimmedPath.hasPrefix("./") ? String(trimmedPath.dropFirst(2)) : trimmedPath
+            mediaURL = entity.directoryPath.appendingPathComponent(cleanPath)
         }
         
         print("📂 MediaManager: Looking for media file:")
@@ -51,15 +77,21 @@ class MediaManager: ObservableObject {
             return nil
         }
         
-        let cacheKey = mediaURL.path
+        let cacheKey = mediaURL.path as NSString
         
-        // Check cache first
-        if let cachedImage = cacheQueue.sync(execute: { imageCache[cacheKey] }) {
-            return cachedImage
+        // Check cache first (thread-safe NSCache)
+        if let cachedItem = imageCache.object(forKey: cacheKey) {
+            return cachedItem.image
         }
         
-        // Load image
-        guard let imageData = try? Data(contentsOf: mediaURL) else {
+        // MEDIUM PRIORITY FIX: Load image asynchronously to not block main thread
+        let imageData: Data
+        do {
+            imageData = try await Task {
+                try Data(contentsOf: mediaURL)
+            }.value
+        } catch {
+            print("⚠️ Failed to load image data: \(error)")
             return nil
         }
         
@@ -75,10 +107,10 @@ class MediaManager: ObservableObject {
         let image = Image(uiImage: uiImage)
         #endif
         
-        // Cache it
-        cacheQueue.async { [weak self] in
-            self?.imageCache[cacheKey] = image
-        }
+        // Cache it with cost (approximate size in bytes)
+        let cost = imageData.count
+        let cacheItem = ImageCacheItem(image: image)
+        imageCache.setObject(cacheItem, forKey: cacheKey, cost: cost)
         
         return image
     }
@@ -88,15 +120,21 @@ class MediaManager: ObservableObject {
             return nil
         }
         
-        let cacheKey = "\(mediaURL.path)_thumb_\(Int(size.width))x\(Int(size.height))"
+        let cacheKey = "\(mediaURL.path)_thumb_\(Int(size.width))x\(Int(size.height))" as NSString
         
-        // Check cache first
-        if let cachedImage = cacheQueue.sync(execute: { imageCache[cacheKey] }) {
-            return cachedImage
+        // Check cache first (thread-safe NSCache)
+        if let cachedItem = imageCache.object(forKey: cacheKey) {
+            return cachedItem.image
         }
         
-        // Load and resize image
-        guard let imageData = try? Data(contentsOf: mediaURL) else {
+        // MEDIUM PRIORITY FIX: Load and resize image asynchronously
+        let imageData: Data
+        do {
+            imageData = try await Task {
+                try Data(contentsOf: mediaURL)
+            }.value
+        } catch {
+            print("⚠️ Failed to load thumbnail data: \(error)")
             return nil
         }
         
@@ -105,10 +143,11 @@ class MediaManager: ObservableObject {
             return nil
         }
         
+        // CRITICAL FIX: Use defer to ensure unlockFocus is called (prevents memory leaks)
         let thumbnail = NSImage(size: size)
         thumbnail.lockFocus()
+        defer { thumbnail.unlockFocus() }
         nsImage.draw(in: NSRect(origin: .zero, size: size))
-        thumbnail.unlockFocus()
         
         let image = Image(nsImage: thumbnail)
         #else
@@ -124,10 +163,10 @@ class MediaManager: ObservableObject {
         let image = Image(uiImage: thumbnail)
         #endif
         
-        // Cache it
-        cacheQueue.async { [weak self] in
-            self?.imageCache[cacheKey] = image
-        }
+        // Cache it with estimated cost
+        let cost = Int(size.width * size.height * 4) // Rough estimate: width * height * 4 bytes per pixel
+        let cacheItem = ImageCacheItem(image: image)
+        imageCache.setObject(cacheItem, forKey: cacheKey, cost: cost)
         
         return image
     }
@@ -189,9 +228,16 @@ class MediaManager: ObservableObject {
     }
     
     func clearCache() {
-        cacheQueue.async { [weak self] in
-            self?.imageCache.removeAll()
-        }
+        imageCache.removeAllObjects()
+    }
+}
+
+// HIGH PRIORITY FIX: Wrapper class for Image to store in NSCache
+class ImageCacheItem {
+    let image: Image
+    
+    init(image: Image) {
+        self.image = image
     }
 }
 
