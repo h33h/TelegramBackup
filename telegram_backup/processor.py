@@ -9,7 +9,12 @@ from telethon import errors
 from telethon.tl.types import ChannelForbidden
 
 from telegram_backup.utils import sanitize_filename, extract_file_identifiers, get_backup_dir
-from telegram_backup.config import MAX_CONCURRENT_DOWNLOADS, DOWNLOAD_BATCH_SIZE, BACKUP_DIR
+from telegram_backup.config import (
+    MAX_CONCURRENT_DOWNLOADS, 
+    DOWNLOAD_BATCH_SIZE, 
+    DOWNLOAD_BATCH_SIZE_BYTES,
+    BACKUP_DIR
+)
 from telegram_backup.database.schema import init_database, migrate_schema
 from telegram_backup.database.operations import save_message_to_db, get_last_message_id
 from telegram_backup.database.media_manager import (
@@ -164,8 +169,11 @@ async def process_entity(client, entity_id, entity_name, entity, limit=None, dow
                             progress.add_file_to_download(file_size or 0)
                             media_download_batch.append((message, id, file_id, access_hash, file_size, media_type, file_path))
                         
-                        # Process batch if it reaches threshold
-                        if len(media_download_batch) >= DOWNLOAD_BATCH_SIZE:
+                        # Calculate current batch size in bytes
+                        current_batch_size = sum(fsize or 0 for _, _, _, _, fsize, _, _ in media_download_batch)
+                        
+                        # Process batch if it reaches threshold (by count OR by size)
+                        if len(media_download_batch) >= DOWNLOAD_BATCH_SIZE or current_batch_size >= DOWNLOAD_BATCH_SIZE_BYTES:
                             # HIGH PRIORITY FIX: Check disk space before batch download
                             total_batch_size = sum(fsize or 0 for _, _, _, _, fsize, _, _ in media_download_batch)
                             has_space, available = check_disk_space(entity_backup_dir, total_batch_size)
@@ -265,6 +273,25 @@ async def process_entity(client, entity_id, entity_name, entity, limit=None, dow
             progress.stop()
             progress.display_summary(entity_name)
             console.print("\n[yellow]Interrupted by user[/yellow]")
+            console.print("[cyan]Saving progress to database...[/cyan]")
+            # Final commit to save all progress
+            try:
+                conn.commit()
+                console.print("[green]✓ Progress saved successfully[/green]")
+            except Exception as e:
+                console.print(f"[red]Failed to save progress: {e}[/red]")
+            raise
+        except asyncio.CancelledError:
+            progress.stop()
+            progress.display_summary(entity_name)
+            console.print("\n[yellow]Download cancelled[/yellow]")
+            console.print("[cyan]Saving progress to database...[/cyan]")
+            # Final commit to save all progress
+            try:
+                conn.commit()
+                console.print("[green]✓ Progress saved successfully[/green]")
+            except Exception as e:
+                console.print(f"[red]Failed to save progress: {e}[/red]")
             raise
         finally:
             # Cleanup orphaned files if requested

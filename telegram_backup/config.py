@@ -24,8 +24,12 @@ except ValueError:
     raise ValueError("TELEGRAM_API_ID must be a valid integer")
 
 # Download settings
-MAX_CONCURRENT_DOWNLOADS = 5
-DOWNLOAD_BATCH_SIZE = 5
+MAX_CONCURRENT_DOWNLOADS = int(os.getenv('MAX_CONCURRENT_DOWNLOADS', '5'))
+DOWNLOAD_BATCH_SIZE = int(os.getenv('DOWNLOAD_BATCH_SIZE', '5'))
+DOWNLOAD_BATCH_SIZE_BYTES = int(os.getenv('DOWNLOAD_BATCH_SIZE_BYTES', str(100 * 1024 * 1024)))  # 100MB default
+MAX_RETRIES = int(os.getenv('MAX_DOWNLOAD_RETRIES', '3'))
+RETRY_DELAY = float(os.getenv('RETRY_DELAY', '2.0'))  # Initial retry delay in seconds
+MAX_FILE_SIZE = int(os.getenv('MAX_FILE_SIZE', str(2 * 1024 * 1024 * 1024)))  # 2GB default limit
 
 # Backup directories
 BACKUP_DIR = "backups"

@@ -4,6 +4,7 @@ import os
 import datetime
 import unicodedata
 import threading
+import asyncio
 import logging
 from pathlib import Path
 from functools import lru_cache
@@ -14,6 +15,9 @@ from telegram_backup.metadata import normalize_filename_for_search
 # HIGH PRIORITY FIX: Thread lock for deduplication operations
 # Prevents race conditions when multiple threads try to deduplicate the same file
 _deduplication_lock = threading.Lock()
+
+# Async lock for async deduplication operations
+_async_deduplication_lock = asyncio.Lock()
 
 # MEDIUM PRIORITY FIX: Logger for error tracking
 logger = logging.getLogger('telegram_backup.media_manager')
